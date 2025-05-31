@@ -1,13 +1,13 @@
-// UserSettings.java - 캘리브레이션 전략 추가 (패키지명 수정)
+// UserSettings.java - 정밀 보정을 기본값으로 변경 (패키지명 수정)
 package camp.visual.android.sdk.sample.domain.model;
 
 public class UserSettings {
 
     // 캘리브레이션 전략 enum 추가
     public enum CalibrationStrategy {
-        QUICK_START("빠른 시작", "2초 간단 보정 + 자동 학습"),
-        BALANCED("균형", "간단 보정 + 선택적 정밀 보정"),
-        PRECISION("정밀", "기존 방식 (정확도 최우선)");
+        QUICK_START("빠른 시작", "2초 간단 보정 + 자동 학습 (정확도 주의)"),
+        BALANCED("균형", "간단 보정 + 선택적 정밀 보정 (표준)"),
+        PRECISION("정밀", "정확한 초기 보정 (적극 권장)");
 
         private final String displayName;
         private final String description;
@@ -121,9 +121,9 @@ public class UserSettings {
         private double oneEuroBeta = 0.007;
         private double oneEuroDCutoff = 1.0;
 
-        // 새로운 필드들 - 기본값 설정
-        private CalibrationStrategy calibrationStrategy = CalibrationStrategy.QUICK_START;
-        private boolean backgroundLearningEnabled = true;
+        // 🎯 새로운 필드들 - 기본값 변경 (정밀 보정 우선)
+        private CalibrationStrategy calibrationStrategy = CalibrationStrategy.PRECISION; // QUICK_START에서 변경
+        private boolean backgroundLearningEnabled = false; // 기본값을 false로 변경 (안전 우선)
 
         // 기존 Builder 메서드들...
         public Builder fixationDurationMs(float val) { fixationDurationMs = val; return this; }

@@ -83,20 +83,21 @@ public class GazeTrackingService extends Service {
     private float sumGazeX = 0f;
     private float sumGazeY = 0f;
 
-    // 🧠 백그라운드 학습 관련 필드들 (새로 추가)
+    // 🚨 백그라운드 학습 관련 필드들 - 매우 제한적으로 변경
     private boolean backgroundLearningEnabled = false;
     private float learningOffsetX = 0f;
     private float learningOffsetY = 0f;
     private int learningCount = 0;
-    private static final int LEARNING_UPDATE_INTERVAL = 10; // 10번 클릭마다 업데이트
-    private static final float LEARNING_RATE = 0.05f; // 매우 보수적인 학습률
+    private static final int LEARNING_UPDATE_INTERVAL = 50; // 10번에서 50번으로 변경 (매우 보수적)
+    private static final float LEARNING_RATE = 0.01f; // 0.05f에서 0.01f로 변경 (매우 보수적)
+    private static final float LEARNING_THRESHOLD = 100f; // 새로 추가: 오차 100px 이상일 때만 학습
 
-    // 📊 정확도 모니터링 관련 필드들 (새로 추가)
+    // 📊 정확도 모니터링 관련 필드들 - 더 엄격하게 변경
     private int totalInteractions = 0;
     private int accurateInteractions = 0;
     private long lastAccuracyCheck = 0;
-    private static final long ACCURACY_CHECK_INTERVAL = 60000; // 1분마다
-    private static final float ACCURACY_THRESHOLD = 70f; // 70% 이하시 재보정 제안
+    private static final long ACCURACY_CHECK_INTERVAL = 120000; // 1분에서 2분으로 변경
+    private static final float ACCURACY_THRESHOLD = 60f; // 70%에서 60%로 변경 (더 엄격)
 
     // 서비스 인스턴스 (캘리브레이션 트리거용)
     private static GazeTrackingService instance;
@@ -239,7 +240,7 @@ public class GazeTrackingService extends Service {
         });
     }
 
-    // 🎯 스마트 캘리브레이션 시스템 (새로 추가)
+    // 🎯 스마트 캘리브레이션 시스템 (기본값을 정밀 보정으로 변경)
     private void startSmartCalibration() {
         if (!userSettings.isAutoOnePointCalibrationEnabled()) {
             Log.d(TAG, "자동 캘리브레이션 비활성화됨");
@@ -251,15 +252,34 @@ public class GazeTrackingService extends Service {
 
         switch (strategy) {
             case QUICK_START:
+                // ⚠️ 빠른 시작이지만 경고와 함께 실행
+                Log.w(TAG, "빠른 시작 모드 - 정확도 주의 필요");
+                showStrategyWarning("⚠️ 빠른 시작 모드입니다. 시선이 정확하지 않으면 '정밀 보정'을 권장합니다.");
                 startQuickStartCalibration();
                 break;
             case BALANCED:
+                Log.d(TAG, "균형 모드 - 기본 보정 후 선택적 정밀 보정");
+                showStrategyWarning("⚖️ 균형 모드입니다. 필요시 정밀 보정을 추천드립니다.");
                 startBalancedCalibration();
                 break;
             case PRECISION:
+                // 🎯 정밀 모드가 기본값이므로 가장 안전
+                Log.d(TAG, "정밀 모드 - 정확한 보정 우선");
+                startPrecisionCalibration();
+                break;
+            default:
+                // 기본값도 정밀 보정으로 변경
+                Log.d(TAG, "기본값으로 정밀 보정 실행");
                 startPrecisionCalibration();
                 break;
         }
+    }
+
+    // 🚨 새로 추가: 전략별 경고 메시지
+    private void showStrategyWarning(String message) {
+        handler.post(() -> {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        });
     }
 
     private void startQuickStartCalibration() {
@@ -350,16 +370,36 @@ public class GazeTrackingService extends Service {
         }, 3000);
     }
 
-    // 📊 백그라운드 학습 시스템 (새로 추가)
+    // 📊 매우 제한적인 백그라운드 학습 시스템 (새로 추가)
     private void enableBackgroundLearning() {
+        // 🚨 정밀 보정 모드에서는 백그라운드 학습 비활성화
+        if (userSettings.getCalibrationStrategy() == UserSettings.CalibrationStrategy.PRECISION) {
+            backgroundLearningEnabled = false;
+            Log.d(TAG, "정밀 모드에서는 백그라운드 학습 비활성화");
+            return;
+        }
+
+        // 사용자가 명시적으로 활성화한 경우에만 제한적으로 활성화
         if (userSettings.isBackgroundLearningEnabled()) {
             backgroundLearningEnabled = true;
-            Log.d(TAG, "백그라운드 학습 활성화");
+            Log.w(TAG, "⚠️ 백그라운드 학습 활성화 - 매우 제한적으로 동작");
+        } else {
+            backgroundLearningEnabled = false;
+            Log.d(TAG, "백그라운드 학습 비활성화됨");
         }
     }
 
+    // 🚨 recordUserInteraction 메서드 - 대폭 제한
     private void recordUserInteraction(float gazeX, float gazeY, float targetX, float targetY) {
-        if (!backgroundLearningEnabled) return;
+        // 🛡️ 안전 검사: 백그라운드 학습이 비활성화되었으면 아무것도 하지 않음
+        if (!backgroundLearningEnabled) {
+            return;
+        }
+
+        // 🛡️ 추가 안전 검사: 정밀 모드에서는 절대 학습하지 않음
+        if (userSettings.getCalibrationStrategy() == UserSettings.CalibrationStrategy.PRECISION) {
+            return;
+        }
 
         totalInteractions++;
 
@@ -373,28 +413,50 @@ public class GazeTrackingService extends Service {
             accurateInteractions++;
         }
 
-        // 매우 가벼운 학습 (단순 지수 이동평균)
-        learningOffsetX = learningOffsetX * (1 - LEARNING_RATE) + errorX * LEARNING_RATE;
-        learningOffsetY = learningOffsetY * (1 - LEARNING_RATE) + errorY * LEARNING_RATE;
-        learningCount++;
+        // 🚨 매우 제한적인 학습 조건들:
+        // 1. 오차가 임계값 이상일 때만
+        // 2. 극단적인 값이 아닐 때만
+        // 3. 연속된 비슷한 오차일 때만
+        if (errorDistance > LEARNING_THRESHOLD && errorDistance < 300) { // 100px~300px 사이의 오차만
+            // 매우 보수적인 학습 (기존보다 5배 더 보수적)
+            learningOffsetX = learningOffsetX * (1 - LEARNING_RATE) + errorX * LEARNING_RATE;
+            learningOffsetY = learningOffsetY * (1 - LEARNING_RATE) + errorY * LEARNING_RATE;
+            learningCount++;
 
-        // 10번마다 오프셋 적용
-        if (learningCount % LEARNING_UPDATE_INTERVAL == 0) {
-            applyLearningOffset();
+            Log.d(TAG, String.format("제한적 학습 기록: 오차=%.1fpx, 누적=%d회", errorDistance, learningCount));
+
+            // 🚨 업데이트 빈도를 10배 줄임 (10번 → 50번)
+            if (learningCount % LEARNING_UPDATE_INTERVAL == 0) {
+                applyLearningOffsetWithValidation();
+            }
+        } else {
+            Log.d(TAG, String.format("학습 제외: 오차=%.1fpx (임계값 밖)", errorDistance));
         }
 
-        // 주기적 정확도 체크
+        // 주기적 정확도 체크 (기존보다 2배 길게)
         checkAccuracyPeriodically();
     }
 
-    private void applyLearningOffset() {
+    // 🛡️ 검증을 포함한 학습 오프셋 적용
+    private void applyLearningOffsetWithValidation() {
+        // 🚨 추가 안전 검사들
+        float learningMagnitude = (float) Math.sqrt(learningOffsetX * learningOffsetX + learningOffsetY * learningOffsetY);
+
+        // 학습된 오프셋이 너무 크면 무시 (20px 이하만 허용)
+        if (learningMagnitude > 20) {
+            Log.w(TAG, String.format("학습 오프셋이 너무 큼 (%.1fpx) - 무시됨", learningMagnitude));
+            learningOffsetX = 0f;
+            learningOffsetY = 0f;
+            return;
+        }
+
         // 기존 오프셋과 학습된 오프셋 결합
         float newOffsetX = userSettings.getCursorOffsetX() + learningOffsetX;
         float newOffsetY = userSettings.getCursorOffsetY() + learningOffsetY;
 
-        // 극단적인 값 방지 (화면 크기의 10% 이내)
+        // 극단적인 값 방지 (화면 크기의 5% 이내로 제한 - 기존 10%에서 더 엄격하게)
         DisplayMetrics dm = getResources().getDisplayMetrics();
-        float maxOffset = Math.min(dm.widthPixels, dm.heightPixels) * 0.1f;
+        float maxOffset = Math.min(dm.widthPixels, dm.heightPixels) * 0.05f; // 0.1f에서 0.05f로 변경
 
         newOffsetX = Math.max(-maxOffset, Math.min(maxOffset, newOffsetX));
         newOffsetY = Math.max(-maxOffset, Math.min(maxOffset, newOffsetY));
@@ -407,70 +469,37 @@ public class GazeTrackingService extends Service {
 
         refreshSettings();
 
-        Log.d(TAG, String.format("학습 오프셋 적용: (%.1f, %.1f)", learningOffsetX, learningOffsetY));
+        Log.d(TAG, String.format("⚠️ 제한적 학습 오프셋 적용: (%.1f, %.1f) → 총 오프셋: (%.1f, %.1f)",
+                learningOffsetX, learningOffsetY, newOffsetX, newOffsetY));
 
         // 학습 오프셋 리셋
         learningOffsetX = 0f;
         learningOffsetY = 0f;
     }
 
+    // 📊 더 엄격한 정확도 체크
     private void checkAccuracyPeriodically() {
         long currentTime = System.currentTimeMillis();
 
-        // 1분마다 정확도 체크
-        if (currentTime - lastAccuracyCheck > ACCURACY_CHECK_INTERVAL && totalInteractions >= 10) {
+        // 2분마다 정확도 체크 (기존 1분에서 변경)
+        if (currentTime - lastAccuracyCheck > ACCURACY_CHECK_INTERVAL && totalInteractions >= 20) { // 최소 20회 상호작용
             float accuracy = (float) accurateInteractions / totalInteractions * 100;
 
             Log.d(TAG, String.format("현재 정확도: %.1f%% (%d/%d)", accuracy, accurateInteractions, totalInteractions));
 
-            // 정확도가 임계값 이하로 떨어지면 재보정 제안
+            // 🚨 더 엄격한 기준으로 재보정 제안 (70% → 60%)
             if (accuracy < ACCURACY_THRESHOLD) {
                 suggestRecalibration();
+
+                // 정확도가 낮으면 백그라운드 학습도 중단
+                if (accuracy < 50f) {
+                    backgroundLearningEnabled = false;
+                    Log.w(TAG, "정확도가 너무 낮아 백그라운드 학습 중단");
+                }
             }
 
             lastAccuracyCheck = currentTime;
         }
-    }
-
-    // 📋 사용자 알림 메서드들 (새로 추가)
-    private void showCompletionMessage() {
-        UserSettings.CalibrationStrategy strategy = userSettings.getCalibrationStrategy();
-        String message;
-
-        switch (strategy) {
-            case QUICK_START:
-                message = "✨ 보정 완료! 사용하며 자동으로 더 정확해집니다.";
-                break;
-            case BALANCED:
-                message = "⚖️ 기본 보정 완료! 필요시 정밀 보정을 권장합니다.";
-                break;
-            case PRECISION:
-                message = "🎯 정밀 보정 완료!";
-                break;
-            default:
-                message = "보정 완료!";
-        }
-
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-    }
-
-    private void scheduleOptionalPrecisionSuggestion() {
-        // 5번 상호작용 후 정밀 보정 제안
-        handler.postDelayed(() -> {
-            if (totalInteractions >= 5) {
-                handler.post(() -> {
-                    Toast.makeText(this, "💡 더 정확한 시선 추적을 원하시면 앱에서 정밀 보정을 해보세요.",
-                            Toast.LENGTH_LONG).show();
-                });
-            }
-        }, 10000); // 10초 후
-    }
-
-    private void suggestRecalibration() {
-        handler.post(() -> {
-            Toast.makeText(this, "📊 시선 정확도가 떨어졌습니다. 앱에서 재보정을 권장합니다.",
-                    Toast.LENGTH_LONG).show();
-        });
     }
 
     // 1포인트 캘리브레이션 + 오프셋 계산 메서드
@@ -912,6 +941,57 @@ public class GazeTrackingService extends Service {
                 ", minCutoff: " + userSettings.getOneEuroMinCutoff() +
                 ", beta: " + userSettings.getOneEuroBeta() +
                 ", dCutoff: " + userSettings.getOneEuroDCutoff());
+    }
+
+    // 📋 개선된 사용자 안내 메서드들
+    private void showCompletionMessage() {
+        UserSettings.CalibrationStrategy strategy = userSettings.getCalibrationStrategy();
+        String message;
+
+        switch (strategy) {
+            case QUICK_START:
+                message = "⚠️ 빠른 보정 완료! 시선이 부정확하면 앱에서 '정밀 보정'을 권장합니다.";
+                break;
+            case BALANCED:
+                message = "⚖️ 기본 보정 완료! 더 정확한 사용을 위해 '정밀 보정'을 권장합니다.";
+                break;
+            case PRECISION:
+                message = "🎯 정밀 보정 완료! 높은 정확도로 사용하실 수 있습니다.";
+                break;
+            default:
+                message = "보정 완료!";
+        }
+
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+    }
+
+    private void scheduleOptionalPrecisionSuggestion() {
+        // 빠른 시작이나 균형 모드에서만 정밀 보정 제안
+        if (userSettings.getCalibrationStrategy() != UserSettings.CalibrationStrategy.PRECISION) {
+            handler.postDelayed(() -> {
+                if (totalInteractions >= 3) { // 3번 상호작용 후 더 빨리 제안
+                    handler.post(() -> {
+                        Toast.makeText(this, "💡 더 정확한 시선 추적을 위해 앱에서 '정밀 보정'을 권장합니다.",
+                                Toast.LENGTH_LONG).show();
+                    });
+                }
+            }, 5000); // 5초 후 (기존 10초에서 단축)
+        }
+    }
+
+    private void suggestRecalibration() {
+        handler.post(() -> {
+            UserSettings.CalibrationStrategy strategy = userSettings.getCalibrationStrategy();
+            String message;
+
+            if (strategy == UserSettings.CalibrationStrategy.PRECISION) {
+                message = "📊 시선 정확도가 떨어졌습니다. 앱에서 재보정을 권장합니다.";
+            } else {
+                message = "📊 시선 정확도가 떨어졌습니다. 앱에서 '정밀 보정'을 강력히 권장합니다.";
+            }
+
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+        });
     }
 
     // 추가된 메소드: 접근성 서비스 활성화 여부 확인

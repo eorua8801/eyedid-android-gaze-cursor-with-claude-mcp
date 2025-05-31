@@ -13,6 +13,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.ActionBar;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import camp.visual.android.sdk.sample.R;
@@ -97,6 +98,9 @@ public class SettingsActivity extends AppCompatActivity {
         initViews();
         loadSettings();
         setupListeners();
+
+        // 🎯 개선된 안내 시스템
+        showCursorOffsetInfo();
     }
 
     private void initViews() {
@@ -169,7 +173,7 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void loadSettings() {
-        // 🎯 캘리브레이션 전략 설정 로드 (새로 추가)
+        // 🎯 캘리브레이션 전략 설정 로드
         UserSettings.CalibrationStrategy strategy = currentSettings.getCalibrationStrategy();
         switch (strategy) {
             case QUICK_START:
@@ -184,7 +188,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
         updateStrategyDescription(strategy);
 
-        // 🧠 백그라운드 학습 설정 로드 (새로 추가)
+        // 🧠 백그라운드 학습 설정 로드
         backgroundLearningSwitch.setChecked(currentSettings.isBackgroundLearningEnabled());
 
         // 기존 SeekBar 설정
@@ -250,22 +254,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
-        // 🎯 캘리브레이션 전략 라디오 그룹 리스너 (새로 추가)
-        calibrationStrategyRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            UserSettings.CalibrationStrategy selectedStrategy = getSelectedStrategy();
-            updateStrategyDescription(selectedStrategy);
-            saveSettings();
-        });
-
-        // 🧠 백그라운드 학습 스위치 리스너 (새로 추가)
-        backgroundLearningSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            saveSettings();
-            if (isChecked) {
-                Toast.makeText(this, "✨ 사용하며 자동으로 정확도가 향상됩니다", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "수동 미세 조정만 사용됩니다", Toast.LENGTH_SHORT).show();
-            }
-        });
+        // 🎯 개선된 리스너들 설정
+        setupStrategyListeners();
+        setupBackgroundLearningSwitch();
+        setupAutoCalibrationSwitch();
 
         // 프리셋 라디오 그룹 리스너
         filterPresetRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
@@ -435,15 +427,93 @@ public class SettingsActivity extends AppCompatActivity {
         });
 
         edgeScrollEnabledSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> saveSettings());
-
         blinkDetectionSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> saveSettings());
+    }
 
+    // 🎯 개선된 캘리브레이션 전략 리스너
+    private void setupStrategyListeners() {
+        calibrationStrategyRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            UserSettings.CalibrationStrategy selectedStrategy = getSelectedStrategy();
+            updateStrategyDescription(selectedStrategy);
+
+            // 전략별 특별 안내
+            switch (selectedStrategy) {
+                case QUICK_START:
+                    Toast.makeText(this, "⚠️ 빠른 시작 모드 선택됨 - 정확도 주의", Toast.LENGTH_LONG).show();
+                    break;
+                case BALANCED:
+                    Toast.makeText(this, "⚖️ 균형 모드 선택됨 - 정밀 보정 권장", Toast.LENGTH_SHORT).show();
+                    break;
+                case PRECISION:
+                    Toast.makeText(this, "🎯 정밀 모드 선택됨 - 최고 정확도 보장", Toast.LENGTH_SHORT).show();
+                    break;
+            }
+
+            // 자동으로 백그라운드 학습 설정 조정
+            if (selectedStrategy == UserSettings.CalibrationStrategy.PRECISION) {
+                if (backgroundLearningSwitch.isChecked()) {
+                    backgroundLearningSwitch.setChecked(false);
+                    Toast.makeText(this, "💡 정밀 모드에서는 백그라운드 학습이 자동 비활성화됩니다", Toast.LENGTH_LONG).show();
+                }
+            }
+
+            saveSettings();
+        });
+    }
+
+    // 🧠 개선된 백그라운드 학습 스위치
+    private void setupBackgroundLearningSwitch() {
+        backgroundLearningSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            saveSettings();
+
+            if (isChecked) {
+                // 백그라운드 학습 활성화시 중요한 경고
+                new AlertDialog.Builder(this)
+                        .setTitle("⚠️ 백그라운드 학습 주의사항")
+                        .setMessage("백그라운드 학습을 활성화하면:\n\n" +
+                                "✅ 장점:\n" +
+                                "• 사용하며 자동으로 미세 조정\n" +
+                                "• 시간이 지날수록 더 정확해질 수 있음\n\n" +
+                                "⚠️ 위험:\n" +
+                                "• 잘못된 패턴을 학습할 수 있음\n" +
+                                "• 억지로 눈을 움직이면 더 부정확해짐\n" +
+                                "• 정밀 모드에서는 자동 비활성화됨\n\n" +
+                                "💡 권장사항:\n" +
+                                "정확한 정밀 보정 후에만 활성화하세요!")
+                        .setPositiveButton("✅ 이해했습니다", null)
+                        .setNegativeButton("❌ 비활성화", (dialog, which) -> {
+                            backgroundLearningSwitch.setChecked(false);
+                        })
+                        .show();
+            } else {
+                Toast.makeText(this, "✅ 안전 모드: 수동 미세 조정만 사용됩니다", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    // 🎯 개선된 자동 캘리브레이션 스위치
+    private void setupAutoCalibrationSwitch() {
         autoOnePointCalibrationSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             saveSettings();
 
-            // 자동 캘리브레이션 비활성화시 경고
             if (!isChecked) {
-                Toast.makeText(this, "⚠️ 수동으로 캘리브레이션을 실행해야 합니다", Toast.LENGTH_LONG).show();
+                // 자동 캘리브레이션 비활성화시 강한 경고
+                new AlertDialog.Builder(this)
+                        .setTitle("⚠️ 자동 보정 비활성화 주의")
+                        .setMessage("자동 보정을 비활성화하면:\n\n" +
+                                "❌ 문제점:\n" +
+                                "• 앱 시작 시 보정이 실행되지 않음\n" +
+                                "• 수동으로 보정해야 함\n" +
+                                "• 보정 없이 사용하면 매우 부정확\n\n" +
+                                "💡 권장사항:\n" +
+                                "특별한 이유가 없다면 활성화 상태를 유지하세요!")
+                        .setPositiveButton("✅ 이해했습니다", null)
+                        .setNegativeButton("🔄 다시 활성화", (dialog, which) -> {
+                            autoOnePointCalibrationSwitch.setChecked(true);
+                        })
+                        .show();
+            } else {
+                Toast.makeText(this, "✅ 앱 시작 시 자동으로 보정됩니다", Toast.LENGTH_SHORT).show();
             }
 
             // 서비스에 설정 변경 알림
@@ -453,32 +523,79 @@ public class SettingsActivity extends AppCompatActivity {
         });
     }
 
-    // 🎯 캘리브레이션 전략 관련 메서드들 (새로 추가)
+    // 🎯 캘리브레이션 전략 관련 메서드들 개선
     private UserSettings.CalibrationStrategy getSelectedStrategy() {
         int checkedId = calibrationStrategyRadioGroup.getCheckedRadioButtonId();
         if (checkedId == R.id.radio_quick_start) return UserSettings.CalibrationStrategy.QUICK_START;
         if (checkedId == R.id.radio_balanced_cal) return UserSettings.CalibrationStrategy.BALANCED;
         if (checkedId == R.id.radio_precision) return UserSettings.CalibrationStrategy.PRECISION;
-        return UserSettings.CalibrationStrategy.QUICK_START; // 기본값
+        return UserSettings.CalibrationStrategy.PRECISION; // 기본값을 PRECISION으로 변경
     }
 
     private void updateStrategyDescription(UserSettings.CalibrationStrategy strategy) {
         String description = "";
         switch (strategy) {
             case QUICK_START:
-                description = "🚀 2초 빠른 보정 후 사용하며 자동 학습합니다.\n바로 시작하고 싶을 때 좋습니다.";
+                description = "⚠️ 빠른 시작 모드 (정확도 주의)\n" +
+                        "• 2초 빠른 보정으로 즉시 시작\n" +
+                        "• 사용하며 자동 학습 (위험할 수 있음)\n" +
+                        "• 시선이 맞지 않으면 정밀 보정 권장\n" +
+                        "• 바로 시작하고 싶을 때만 선택";
                 break;
             case BALANCED:
-                description = "⚖️ 빠른 보정 후 필요시 정밀 보정을 추천합니다.\n균형잡힌 선택입니다.";
+                description = "⚖️ 균형 모드 (표준)\n" +
+                        "• 빠른 기본 보정 후 선택적 정밀 보정\n" +
+                        "• 제한적 자동 학습\n" +
+                        "• 필요시 정밀 보정을 적극 권장\n" +
+                        "• 적당한 속도와 정확도의 균형";
                 break;
             case PRECISION:
-                description = "🎯 기존 방식으로 처음부터 정확한 보정을 합니다.\n정밀 작업시 좋습니다.";
+                description = "🎯 정밀 모드 (적극 권장)\n" +
+                        "• 5포인트 정밀 보정으로 높은 정확도\n" +
+                        "• 자동 학습 없이 안전한 사용\n" +
+                        "• 가장 정확하고 안정적인 시선 추적\n" +
+                        "• 정밀 작업이나 장시간 사용에 최적";
                 break;
         }
 
         if (strategyDescriptionText != null) {
             strategyDescriptionText.setText(description);
         }
+    }
+
+    // 🎯 커서 오프셋 안내 개선
+    private void showCursorOffsetInfo() {
+        // 설정 화면 진입시 한 번만 표시
+        if (isFirstTimeOffset()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("💡 커서 위치 미세 조정 안내")
+                    .setMessage("커서 위치 미세 조정 기능:\n\n" +
+                            "✅ 올바른 사용법:\n" +
+                            "• 정밀 보정을 먼저 실행\n" +
+                            "• 미세한 차이만 조정 (±10px 이내 권장)\n" +
+                            "• 큰 차이는 재보정으로 해결\n\n" +
+                            "❌ 잘못된 사용법:\n" +
+                            "• 보정 없이 오프셋으로만 맞추기\n" +
+                            "• 큰 차이를 오프셋으로 해결\n" +
+                            "• 억지로 많이 조정하기\n\n" +
+                            "🎯 기억하세요: 정확한 보정이 우선입니다!")
+                    .setPositiveButton("✅ 이해했습니다", null)
+                    .show();
+
+            markOffsetInfoShown();
+        }
+    }
+
+    private boolean isFirstTimeOffset() {
+        return getSharedPreferences("settings_info", MODE_PRIVATE)
+                .getBoolean("offset_info_shown", false) == false;
+    }
+
+    private void markOffsetInfoShown() {
+        getSharedPreferences("settings_info", MODE_PRIVATE)
+                .edit()
+                .putBoolean("offset_info_shown", true)
+                .apply();
     }
 
     private void updateCustomFilterVisibility() {

@@ -1,4 +1,4 @@
-// SharedPrefsSettingsRepository.java - 새 설정 추가 (패키지명 수정)
+// SharedPrefsSettingsRepository.java - 안전한 기본값 설정 (패키지명 수정)
 package camp.visual.android.sdk.sample.data.settings;
 
 import android.content.Context;
@@ -41,14 +41,14 @@ public class SharedPrefsSettingsRepository implements SettingsRepository {
 
     @Override
     public UserSettings getUserSettings() {
-        // 캘리브레이션 전략 로드 (기본값: QUICK_START)
+        // 🎯 캘리브레이션 전략 로드 (기본값: PRECISION으로 변경)
         String strategyName = prefs.getString(KEY_CALIBRATION_STRATEGY,
-                UserSettings.CalibrationStrategy.QUICK_START.name());
+                UserSettings.CalibrationStrategy.PRECISION.name()); // QUICK_START에서 변경
         UserSettings.CalibrationStrategy strategy;
         try {
             strategy = UserSettings.CalibrationStrategy.valueOf(strategyName);
         } catch (IllegalArgumentException e) {
-            strategy = UserSettings.CalibrationStrategy.QUICK_START; // 안전한 기본값
+            strategy = UserSettings.CalibrationStrategy.PRECISION; // 안전한 기본값으로 변경
         }
 
         // OneEuroFilter 프리셋 로드 (기존 코드)
@@ -73,9 +73,9 @@ public class SharedPrefsSettingsRepository implements SettingsRepository {
                 .oneEuroMinCutoff(prefs.getFloat(KEY_ONE_EURO_MIN_CUTOFF, 1.0f))
                 .oneEuroBeta(prefs.getFloat(KEY_ONE_EURO_BETA, 0.007f))
                 .oneEuroDCutoff(prefs.getFloat(KEY_ONE_EURO_D_CUTOFF, 1.0f))
-                // 새 설정들 추가
+                // 🎯 새 설정들 추가 (안전한 기본값)
                 .calibrationStrategy(strategy)
-                .backgroundLearningEnabled(prefs.getBoolean(KEY_BACKGROUND_LEARNING, true))
+                .backgroundLearningEnabled(prefs.getBoolean(KEY_BACKGROUND_LEARNING, false)) // 기본값 false로 변경
                 .build();
     }
 
@@ -113,7 +113,11 @@ public class SharedPrefsSettingsRepository implements SettingsRepository {
 
     @Override
     public void setDefaultSettings() {
-        saveUserSettings(new UserSettings.Builder().build());
+        // 🎯 기본 설정도 정밀 보정 우선으로 변경
+        saveUserSettings(new UserSettings.Builder()
+                .calibrationStrategy(UserSettings.CalibrationStrategy.PRECISION)
+                .backgroundLearningEnabled(false)
+                .build());
     }
 
     // 기존 메서드들 유지...

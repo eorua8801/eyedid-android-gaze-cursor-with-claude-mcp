@@ -12,19 +12,31 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- 🎯 새로운 캘리브레이션 전략 설정 섹션 -->
+        <!-- 🎯 개선된 캘리브레이션 전략 설정 섹션 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🎯 캘리브레이션 전략"
+            android:text="🎯 캘리브레이션 전략 (중요)"
             android:textSize="18sp"
             android:textStyle="bold"
+            android:textColor="#2E7D32"
             android:layout_marginBottom="8dp"/>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="사용 목적에 맞는 보정 방식을 선택하세요"
+            android:text="⚠️ 중요: 정밀 모드를 권장합니다. 빠른 시작은 정확도가 낮을 수 있습니다."
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="#D32F2F"
+            android:background="#FFEBEE"
+            android:padding="8dp"
+            android:layout_marginBottom="12dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="사용 목적과 정확도 요구사항에 맞는 보정 방식을 선택하세요"
             android:textSize="12sp"
             android:textStyle="italic"
             android:textColor="#666666"
@@ -41,21 +53,25 @@
                 android:id="@+id/radio_quick_start"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🚀 빠른 시작"
+                android:text="⚠️ 빠른 시작 (정확도 주의)"
+                android:textColor="#FF6F00"
                 android:layout_marginBottom="4dp"/>
 
             <RadioButton
                 android:id="@+id/radio_balanced_cal"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="⚖️ 균형"
+                android:text="⚖️ 균형 (표준)"
+                android:textColor="#1976D2"
                 android:layout_marginBottom="4dp"/>
 
             <RadioButton
                 android:id="@+id/radio_precision"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🎯 정밀"
+                android:text="🎯 정밀 (적극 권장)"
+                android:textColor="#2E7D32"
+                android:textStyle="bold"
                 android:layout_marginBottom="4dp"/>
 
         </RadioGroup>
@@ -65,26 +81,36 @@
             android:id="@+id/text_strategy_description"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="빠른 시작: 2초 빠른 보정 후 사용하며 자동 학습합니다."
+            android:text="정밀: 5포인트 정밀 보정으로 가장 정확하고 안정적인 시선 추적을 제공합니다."
             android:textSize="12sp"
             android:textColor="#666666"
             android:layout_marginBottom="12dp"
-            android:background="#F5F5F5"
+            android:background="#F0F7FF"
             android:padding="8dp"/>
 
-        <!-- 백그라운드 학습 스위치 -->
+        <!-- 개선된 백그라운드 학습 스위치 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚠️ 주의: 백그라운드 학습이 잘못된 패턴을 학습할 수 있습니다"
+            android:textSize="11sp"
+            android:textColor="#D32F2F"
+            android:textStyle="italic"
+            android:layout_marginBottom="4dp"/>
+
         <Switch
             android:id="@+id/switch_background_learning"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🧠 백그라운드 학습 (사용하며 자동 개선)"
+            android:text="🧠 백그라운드 학습 (정밀 보정 후에만 권장)"
+            android:textSize="14sp"
             android:layout_marginBottom="16dp"/>
 
         <!-- 기존 캘리브레이션 설정들 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="캘리브레이션 설정"
+            android:text="기본 캘리브레이션 설정"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginBottom="8dp"/>
@@ -93,9 +119,10 @@
             android:id="@+id/switch_auto_one_point_calibration"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="앱 시작 시 자동 빠른 보정"
+            android:text="앱 시작 시 자동 보정 (권장)"
             android:layout_marginBottom="16dp"/>
 
+        <!-- 개선된 커서 위치 미세 조정 섹션 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -107,10 +134,21 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="💡 팁: 자동 보정 후 미세 조정하시면 더 정확합니다"
+            android:text="💡 중요 안내: 정밀 보정을 먼저 실행한 후 미세한 차이만 조정하세요"
             android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="#1976D2"
+            android:background="#E3F2FD"
+            android:padding="8dp"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚠️ 주의: 큰 차이는 오프셋으로 해결하지 말고 재보정하세요 (±10px 이내 권장)"
+            android:textSize="11sp"
             android:textStyle="italic"
-            android:textColor="#666666"
+            android:textColor="#FF6F00"
             android:layout_marginBottom="8dp"/>
 
         <TextView
@@ -183,7 +221,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="💡 시선 추적의 부드러움과 반응성을 조절합니다"
+            android:text="💡 시선 추적의 부드러움과 반응성을 조절합니다. 균형 모드 권장."
             android:textSize="12sp"
             android:textStyle="italic"
             android:textColor="#666666"
@@ -231,14 +269,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="⚖️ 균형 (권장)"
+                android:textStyle="bold"
+                android:textColor="#2E7D32"
                 android:layout_marginBottom="4dp"/>
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="   안정성과 반응성의 균형"
+                android:text="   ✅ 안정성과 반응성의 최적 균형"
                 android:textSize="12sp"
-                android:textColor="#666666"
+                android:textColor="#2E7D32"
+                android:textStyle="bold"
                 android:layout_marginBottom="8dp"/>
 
             <RadioButton
@@ -275,15 +316,15 @@
                 android:id="@+id/radio_custom"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="🔧 커스텀"
+                android:text="🔧 커스텀 (고급 사용자용)"
                 android:layout_marginBottom="4dp"/>
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="   사용자 직접 설정"
+                android:text="   ⚠️ 고급 사용자만 직접 설정"
                 android:textSize="12sp"
-                android:textColor="#666666"
+                android:textColor="#FF6F00"
                 android:layout_marginBottom="8dp"/>
 
         </RadioGroup>
@@ -301,6 +342,17 @@
                 android:layout_height="1dp"
                 android:background="#E0E0E0"
                 android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="⚠️ 고급 설정: 잘못 설정하면 시선 추적이 불안정해질 수 있습니다"
+                android:textSize="12sp"
+                android:textColor="#D32F2F"
+                android:textStyle="bold"
+                android:background="#FFEBEE"
+                android:padding="8dp"
+                android:layout_marginBottom="12dp"/>
 
             <TextView
                 android:layout_width="match_parent"
@@ -427,7 +479,7 @@
 
         </LinearLayout>
 
-        <!-- 기존 설정들 계속 -->
+        <!-- 기존 설정들 계속 (나머지는 동일) -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -440,21 +492,21 @@
             android:id="@+id/switch_click_enabled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="시선 고정 클릭 활성화"
+            android:text="✅ 시선 고정 클릭 활성화"
             android:layout_marginBottom="8dp"/>
 
         <Switch
             android:id="@+id/switch_scroll_enabled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="시선 스크롤 활성화"
+            android:text="📜 시선 스크롤 활성화"
             android:layout_marginBottom="8dp"/>
 
         <Switch
             android:id="@+id/switch_edge_scroll_enabled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="화면 가장자리 스크롤 활성화"
+            android:text="↕️ 화면 가장자리 스크롤 활성화"
             android:layout_marginStart="20dp"
             android:layout_marginBottom="8dp"/>
 
@@ -462,9 +514,10 @@
             android:id="@+id/switch_blink_detection"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="눈 깜빡임 감지"
+            android:text="👁️ 눈 깜빡임 감지"
             android:layout_marginBottom="16dp"/>
 
+        <!-- 나머지 설정들은 기존과 동일... -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
