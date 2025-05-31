@@ -13,6 +13,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -32,6 +33,9 @@ import camp.visual.android.sdk.sample.service.tracking.GazeTrackingService;
 import camp.visual.android.sdk.sample.ui.settings.SettingsActivity;
 import camp.visual.android.sdk.sample.ui.views.CalibrationViewer;
 import camp.visual.android.sdk.sample.ui.views.PointView;
+import camp.visual.android.sdk.sample.domain.model.UserSettings;
+import camp.visual.android.sdk.sample.data.settings.SettingsRepository;
+import camp.visual.android.sdk.sample.data.settings.SharedPrefsSettingsRepository;
 import camp.visual.eyedid.gazetracker.GazeTracker;
 import camp.visual.eyedid.gazetracker.callback.CalibrationCallback;
 import camp.visual.eyedid.gazetracker.callback.InitializationCallback;
@@ -65,6 +69,13 @@ public class MainActivity extends AppCompatActivity {
     private final ViewLayoutChecker viewLayoutChecker = new ViewLayoutChecker();
     private Handler backgroundHandler;
     private final HandlerThread backgroundThread = new HandlerThread("background");
+
+    // 🎯 새로 추가된 UI 요소들
+    private TextView statusText;
+    private ProgressBar progressBar;
+    private Handler handler = new Handler();
+    private SettingsRepository settingsRepository;
+    private UserSettings userSettings;
 
     // 서비스에서 캘리브레이션을 트리거하기 위한 인스턴스 참조
     private static MainActivity instance;
@@ -131,6 +142,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 btnAlignment.setEnabled(true);
                 btnStartCalibration.setEnabled(true);
+                updateStatusText("시선 추적 활성화됨 ✅");
             });
         }
 
@@ -139,6 +151,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 btnAlignment.setEnabled(false);
                 btnStartCalibration.setEnabled(false);
+                updateStatusText("시선 추적 중지됨 ❌");
             });
             if (error != StatusErrorType.ERROR_NONE) {
                 if (error == StatusErrorType.ERROR_CAMERA_START) {
@@ -162,27 +175,22 @@ public class MainActivity extends AppCompatActivity {
                 if (isServiceRunning()) {
                     GazeTrackingService service = GazeTrackingService.getInstance();
                     if (service != null) {
+                        // 🎯 현재 설정된 전략에 따른 적절한 안내 메시지
+                        String message = getCalibrationMessage();
+                        showToast(message, true);
                         service.startOnePointCalibrationWithOffset();
-                        showToast("시선 정렬을 시작합니다", true);
                     } else {
-                        showToast("서비스에 연결할 수 없습니다", false);
+                        showToast("❌ 서비스에 연결할 수 없습니다", false);
                     }
                 } else {
-                    showToast("시선 추적 서비스가 실행되지 않았습니다", false);
+                    showToast("❌ 시선 추적 서비스가 실행되지 않았습니다", false);
+                    startServicesAndCheckPermissions();
                 }
             } else if (v == btnStartCalibration) {
                 Log.d("MainActivity", "캘리브레이션 버튼 클릭됨");
 
-                if (gazeTracker != null || isServiceRunning()) {
-                    startCalibration();
-                } else {
-                    Log.w("MainActivity", "GazeTracker와 서비스 모두 사용 불가");
-                    showToast("시선 추적 시스템을 초기화하는 중입니다. 잠시 후 다시 시도해주세요.", false);
-
-                    // 초기화 재시도
-                    showProgress();
-                    initTracker();
-                }
+                // 🎯 정밀 캘리브레이션 확인 대화상자
+                showPrecisionCalibrationDialog();
             }
         }
     };
@@ -198,6 +206,7 @@ public class MainActivity extends AppCompatActivity {
                 gazeTracker.stopTracking();
                 btnAlignment.setEnabled(true);
                 btnStartCalibration.setEnabled(true);
+                updateStatusText("서비스 연결됨 ✅");
             } else {
                 // 서비스가 없는 경우에만 MainActivity에서 SDK 사용
                 this.gazeTracker = gazeTracker;
@@ -212,6 +221,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     btnAlignment.setEnabled(true);
                     btnStartCalibration.setEnabled(true);
+                    updateStatusText("시선 추적 초기화됨 ✅");
                 });
             }
         }
@@ -230,6 +240,11 @@ public class MainActivity extends AppCompatActivity {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
+
+        // 🎯 설정 저장소 초기화
+        settingsRepository = new SharedPrefsSettingsRepository(this);
+        userSettings = settingsRepository.getUserSettings();
+
         initViews();
         checkPermission();
         backgroundThread.start();
@@ -237,6 +252,76 @@ public class MainActivity extends AppCompatActivity {
 
         // 서비스 시작 및 권한 확인
         startServicesAndCheckPermissions();
+
+        // 🎯 사용자 친화적 시작 메시지
+        showWelcomeMessage();
+    }
+
+    // 🎯 사용자 친화적 메시지들 (새로 추가)
+    private void showWelcomeMessage() {
+        UserSettings.CalibrationStrategy strategy = userSettings.getCalibrationStrategy();
+        final String welcomeMsg;
+
+        switch (strategy) {
+            case QUICK_START:
+                welcomeMsg = "🚀 빠른 시작 모드로 설정되어 있습니다.\n2초만 기다리면 바로 사용할 수 있어요!";
+                break;
+            case BALANCED:
+                welcomeMsg = "⚖️ 균형 모드로 설정되어 있습니다.\n빠른 보정 후 필요시 정밀 보정을 제안드려요.";
+                break;
+            case PRECISION:
+                welcomeMsg = "🎯 정밀 모드로 설정되어 있습니다.\n정확한 보정을 위해 조금 더 시간이 걸릴 수 있어요.";
+                break;
+            default:
+                welcomeMsg = "시선 추적이 시작되었습니다.";
+                break;
+        }
+
+        // 3초 후에 환영 메시지 표시
+        handler.postDelayed(() -> {
+            if (!isFinishing()) {
+                Toast.makeText(this, welcomeMsg, Toast.LENGTH_LONG).show();
+            }
+        }, 3000);
+    }
+
+    // 🎯 캘리브레이션 관련 사용자 친화적 메서드들 (새로 추가)
+    private String getCalibrationMessage() {
+        UserSettings.CalibrationStrategy strategy = userSettings.getCalibrationStrategy();
+
+        switch (strategy) {
+            case QUICK_START:
+                return "🚀 빠른 보정을 시작합니다 (2초 소요)";
+            case BALANCED:
+                return "⚖️ 스마트 보정을 시작합니다";
+            case PRECISION:
+                return "🎯 정밀 보정을 시작합니다";
+            default:
+                return "시선 보정을 시작합니다";
+        }
+    }
+
+    private void showPrecisionCalibrationDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("🎯 정밀 보정")
+                .setMessage("더 정확한 시선 추적을 위해 5포인트 정밀 보정을 실행합니다.\n\n" +
+                        "📋 진행 방법:\n" +
+                        "• 화면에 나타나는 점들을 차례로 응시해 주세요\n" +
+                        "• 각 점당 약 2초씩 소요됩니다\n" +
+                        "• 총 10-15초 정도 걸립니다\n\n" +
+                        "💡 팁: 편안한 자세로 화면과 30-60cm 거리를 유지해 주세요")
+                .setPositiveButton("✅ 시작하기", (dialog, which) -> {
+                    if (isServiceRunning()) {
+                        startCalibration();
+                        showToast("🎯 정밀 보정을 시작합니다", true);
+                    } else {
+                        showToast("⏳ 시선 추적 시스템을 초기화하는 중입니다", false);
+                        showProgress();
+                        initTracker();
+                    }
+                })
+                .setNegativeButton("취소", null)
+                .show();
     }
 
     // 서비스 시작 및 권한 확인
@@ -254,20 +339,58 @@ public class MainActivity extends AppCompatActivity {
             Intent serviceIntent = new Intent(this, GazeTrackingService.class);
             serviceIntent.putExtra("reset_offset", true); // 오프셋 리셋 요청
             startForegroundService(serviceIntent);
+
+            // 🎯 사용자에게 친근한 시작 안내
+            showServiceStartMessage();
         }
+    }
+
+    // 🎯 서비스 시작 메시지 (새로 추가)
+    private void showServiceStartMessage() {
+        handler.postDelayed(() -> {
+            if (isServiceRunning()) {
+                UserSettings.CalibrationStrategy strategy = userSettings.getCalibrationStrategy();
+                final String message;
+
+                switch (strategy) {
+                    case QUICK_START:
+                        message = "✨ 시선 추적이 시작되었습니다!\n2초 보정 후 바로 사용하며 더 정확해집니다.";
+                        break;
+                    case BALANCED:
+                        message = "✨ 시선 추적이 시작되었습니다!\n스마트 보정으로 편리하게 사용하세요.";
+                        break;
+                    case PRECISION:
+                        message = "✨ 시선 추적이 시작되었습니다!\n정밀 보정으로 높은 정확도를 제공합니다.";
+                        break;
+                    default:
+                        message = "✨ 시선 추적이 시작되었습니다!";
+                        break;
+                }
+
+                Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+                updateStatusText("시선 추적 활성화됨 ✅");
+            }
+        }, 2000);
     }
 
     // 오버레이 권한 요청 다이얼로그
     private void showOverlayPermissionDialog() {
         new AlertDialog.Builder(this)
-                .setTitle("화면 오버레이 권한 필요")
-                .setMessage("시선 추적 기능을 사용하려면 다른 앱 위에 표시 권한이 필요합니다. 설정 화면으로 이동하시겠습니까?")
-                .setPositiveButton("이동", (dialog, which) -> {
+                .setTitle("🖥️ 화면 오버레이 권한 필요")
+                .setMessage("시선 커서를 표시하기 위해 '다른 앱 위에 표시' 권한이 필요합니다.\n\n" +
+                        "📱 설정 방법:\n" +
+                        "1. 설정 화면이 열리면\n" +
+                        "2. 'EyedidSampleApp' 찾기\n" +
+                        "3. '허용' 또는 '사용' 버튼 누르기\n" +
+                        "4. 앱으로 돌아오기\n\n" +
+                        "💡 이 권한은 시선 커서 표시에만 사용됩니다.")
+                .setPositiveButton("⚙️ 설정으로 이동", (dialog, which) -> {
                     Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                             Uri.parse("package:" + getPackageName()));
                     startActivityForResult(intent, REQ_OVERLAY_PERMISSION);
                 })
-                .setNegativeButton("취소", null)
+                .setNegativeButton("나중에", null)
+                .setCancelable(false)
                 .show();
     }
 
@@ -298,15 +421,19 @@ public class MainActivity extends AppCompatActivity {
     // 접근성 권한 요청 다이얼로그
     private void showAccessibilityPermissionDialog() {
         new AlertDialog.Builder(this)
-                .setTitle("접근성 권한 설정 필요")
-                .setMessage("시선 클릭 기능을 사용하려면 접근성 권한 설정이 필요합니다.\n\n" +
-                        "설정 화면에서 'EyedidSampleApp'을 찾아 활성화해주세요.\n" +
-                        "'사용 안 함'을 '사용 중'으로 바꾸고 확인을 누르세요.\n\n" +
-                        "지금 설정 화면으로 이동할까요?")
-                .setPositiveButton("이동", (d, which) -> {
+                .setTitle("♿ 접근성 서비스 설정")
+                .setMessage("시선으로 화면을 터치하고 스크롤하기 위해 접근성 서비스 권한이 필요합니다.\n\n" +
+                        "📱 설정 방법:\n" +
+                        "1. 설정 > 접근성 (또는 디지털 웰빙 > 접근성)\n" +
+                        "2. '다운로드한 앱' 또는 '설치된 앱'에서\n" +
+                        "3. 'EyedidSampleApp' 찾기\n" +
+                        "4. '사용 안 함' → '사용' 변경\n" +
+                        "5. '확인' 버튼 누르기\n\n" +
+                        "💡 이 권한은 시선으로 터치/스크롤하는 데만 사용됩니다.")
+                .setPositiveButton("⚙️ 설정으로 이동", (d, which) -> {
                     openAccessibilitySettings();
                 })
-                .setNegativeButton("취소", null)
+                .setNegativeButton("나중에", null)
                 .show();
     }
 
@@ -353,6 +480,7 @@ public class MainActivity extends AppCompatActivity {
         if (requestCode == REQ_OVERLAY_PERMISSION) {
             // 오버레이 권한 확인 후 처리
             if (Settings.canDrawOverlays(this)) {
+                showToast("✅ 오버레이 권한이 허용되었습니다!", true);
                 // 접근성 서비스 확인
                 if (!isAccessibilityServiceEnabled()) {
                     showAccessibilityPermissionDialog();
@@ -363,7 +491,8 @@ public class MainActivity extends AppCompatActivity {
                 serviceIntent.putExtra("reset_offset", true);
                 startForegroundService(serviceIntent);
             } else {
-                showToast("오버레이 권한이 필요합니다", false);
+                showToast("❌ 오버레이 권한이 필요합니다", false);
+                updateStatusText("오버레이 권한 필요 ⚠️");
             }
         }
     }
@@ -372,15 +501,21 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
+        // 🎯 설정 다시 로드 (설정 화면에서 돌아올 때 반영)
+        userSettings = settingsRepository.getUserSettings();
+
         // 권한 상태 확인
         if (!Settings.canDrawOverlays(this)) {
-            showOverlayPermissionDialog();
+            updateStatusText("오버레이 권한 필요 ⚠️");
             return;
         }
 
         if (!isAccessibilityServiceEnabled()) {
-            showToast("접근성 서비스를 활성화해주세요", true);
-            return;
+            updateStatusText("접근성 서비스 권한 필요 ⚠️");
+            // 더 친화적인 메시지
+            handler.postDelayed(() -> {
+                showToast("💡 접근성 서비스를 활성화하면 시선으로 터치할 수 있습니다", true);
+            }, 1000);
         }
 
         // 서비스 상태 확인 및 연동
@@ -398,6 +533,7 @@ public class MainActivity extends AppCompatActivity {
             btnAlignment.setEnabled(true);
             btnStartCalibration.setEnabled(true);
             hideProgress();
+            updateStatusText("시선 추적 활성화됨 ✅");
 
             // 서비스에 이미 SDK가 있으면 MainActivity의 tracker는 해제
             if (gazeTracker != null) {
@@ -408,6 +544,8 @@ public class MainActivity extends AppCompatActivity {
         } else {
             // 서비스가 없으면 새로 시작 (오프셋 리셋 포함)
             Log.d("MainActivity", "서비스 시작");
+            updateStatusText("서비스 시작 중...");
+
             Intent serviceIntent = new Intent(this, GazeTrackingService.class);
             serviceIntent.putExtra("reset_offset", true);
             startForegroundService(serviceIntent);
@@ -419,9 +557,13 @@ public class MainActivity extends AppCompatActivity {
                         btnAlignment.setEnabled(true);
                         btnStartCalibration.setEnabled(true);
                         hideProgress();
+                        updateStatusText("시선 추적 활성화됨 ✅");
+                        showServiceStartMessage();
+                    } else {
+                        updateStatusText("서비스 시작 실패 ❌");
                     }
                 });
-            }, 1000);
+            }, 2000);
         }
     }
 
@@ -431,6 +573,10 @@ public class MainActivity extends AppCompatActivity {
         layoutProgress = findViewById(R.id.layout_progress);
         viewCalibration = findViewById(R.id.view_calibration);
         viewPoint = findViewById(R.id.view_point);
+
+        // 🎯 새로운 UI 요소들 추가
+        statusText = findViewById(R.id.text_status);
+        progressBar = findViewById(R.id.progress_bar);
 
         // 정렬 버튼 추가
         btnAlignment = findViewById(R.id.btn_alignment);
@@ -452,6 +598,7 @@ public class MainActivity extends AppCompatActivity {
         btnAlignment.setEnabled(false);
         btnStartCalibration.setEnabled(false);
         viewPoint.setPosition(-999,-999);
+        updateStatusText("시스템 초기화 중...");
 
         // 오프셋 설정 개선 - 뷰가 완전히 그려진 후 계산
         viewCalibration.post(() -> {
@@ -461,6 +608,36 @@ public class MainActivity extends AppCompatActivity {
                 Log.d("MainActivity", "Offset 설정됨: x=" + x + ", y=" + y);
             });
         });
+    }
+
+    // 🎯 UI 상태 업데이트 메서드들 (새로 추가)
+    private void updateStatusText(String status) {
+        if (statusText != null) {
+            statusText.setText(status);
+        }
+    }
+
+    private void showProgress() {
+        if (layoutProgress != null) {
+            runOnUiThread(() -> layoutProgress.setVisibility(View.VISIBLE));
+        }
+        if (progressBar != null) {
+            progressBar.setVisibility(View.VISIBLE);
+        }
+        updateStatusText("시스템 초기화 중...");
+    }
+
+    private void hideProgress() {
+        if (layoutProgress != null) {
+            runOnUiThread(() -> layoutProgress.setVisibility(View.GONE));
+        }
+        if (progressBar != null) {
+            progressBar.setVisibility(View.GONE);
+        }
+    }
+
+    private void showToast(String message, boolean isSuccess) {
+        Toast.makeText(this, message, isSuccess ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG).show();
     }
 
     private void checkPermission() {
@@ -496,11 +673,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void showToast(final String msg, final boolean isShort) {
-        runOnUiThread(() -> Toast.makeText(MainActivity.this, msg,
-                isShort ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG).show());
-    }
-
     private void permissionGranted() {
         // 서비스가 이미 실행 중인지 확인
         if (isServiceRunning()) {
@@ -509,6 +681,7 @@ public class MainActivity extends AppCompatActivity {
             hideProgress();
             btnAlignment.setEnabled(true);
             btnStartCalibration.setEnabled(true);
+            updateStatusText("서비스 연결됨 ✅");
             showToast("시선 추적 서비스 연결됨", true);
         } else {
             // 서비스가 없으면 새로 초기화
@@ -529,23 +702,12 @@ public class MainActivity extends AppCompatActivity {
             btnAlignment.setEnabled(true);
             btnStartCalibration.setEnabled(true);
             hideProgress();
+            updateStatusText("서비스 연결됨 ✅");
         } else {
             // 서비스가 없는 경우에만 SDK 초기화
             Log.d("MainActivity", "새로운 SDK 초기화 시작");
             GazeTrackerOptions options = new GazeTrackerOptions.Builder().build();
             GazeTracker.initGazeTracker(this, EYEDID_SDK_LICENSE, initializationCallback, options);
-        }
-    }
-
-    private void showProgress() {
-        if (layoutProgress != null) {
-            runOnUiThread(() -> layoutProgress.setVisibility(View.VISIBLE));
-        }
-    }
-
-    private void hideProgress() {
-        if (layoutProgress != null) {
-            runOnUiThread(() -> layoutProgress.setVisibility(View.GONE));
         }
     }
 

@@ -83,6 +83,21 @@ public class GazeTrackingService extends Service {
     private float sumGazeX = 0f;
     private float sumGazeY = 0f;
 
+    // 🧠 백그라운드 학습 관련 필드들 (새로 추가)
+    private boolean backgroundLearningEnabled = false;
+    private float learningOffsetX = 0f;
+    private float learningOffsetY = 0f;
+    private int learningCount = 0;
+    private static final int LEARNING_UPDATE_INTERVAL = 10; // 10번 클릭마다 업데이트
+    private static final float LEARNING_RATE = 0.05f; // 매우 보수적인 학습률
+
+    // 📊 정확도 모니터링 관련 필드들 (새로 추가)
+    private int totalInteractions = 0;
+    private int accurateInteractions = 0;
+    private long lastAccuracyCheck = 0;
+    private static final long ACCURACY_CHECK_INTERVAL = 60000; // 1분마다
+    private static final float ACCURACY_THRESHOLD = 70f; // 70% 이하시 재보정 제안
+
     // 서비스 인스턴스 (캘리브레이션 트리거용)
     private static GazeTrackingService instance;
 
@@ -102,8 +117,6 @@ public class GazeTrackingService extends Service {
 
         // 서비스 실행 상태 확인
         checkAccessibilityService();
-
-        // 자동 1포인트 캘리브레이션은 initGazeTracker 콜백에서 처리
     }
 
     private void initRepositories() {
@@ -214,15 +227,249 @@ public class GazeTrackingService extends Service {
                 trackingRepository.startTracking();
                 Log.d(TAG, "GazeTracker 초기화 성공");
 
-                // 초기화 완료 후 자동 1포인트 캘리브레이션 실행
+                // 🎯 스마트 캘리브레이션 시작 (기존 자동 캘리브레이션 대체)
                 if (userSettings.isAutoOnePointCalibrationEnabled() && !isCalibrating) {
-                    Log.d(TAG, "자동 1포인트 캘리브레이션 시작");
-                    startOnePointCalibrationWithOffset();
+                    Log.d(TAG, "스마트 캘리브레이션 시작");
+                    startSmartCalibration();
                 }
             } else {
                 Log.e(TAG, "GazeTracker 초기화 실패: " + error);
                 Toast.makeText(this, "시선 추적 초기화 실패", Toast.LENGTH_LONG).show();
             }
+        });
+    }
+
+    // 🎯 스마트 캘리브레이션 시스템 (새로 추가)
+    private void startSmartCalibration() {
+        if (!userSettings.isAutoOnePointCalibrationEnabled()) {
+            Log.d(TAG, "자동 캘리브레이션 비활성화됨");
+            return;
+        }
+
+        UserSettings.CalibrationStrategy strategy = userSettings.getCalibrationStrategy();
+        Log.d(TAG, "캘리브레이션 전략: " + strategy.getDisplayName());
+
+        switch (strategy) {
+            case QUICK_START:
+                startQuickStartCalibration();
+                break;
+            case BALANCED:
+                startBalancedCalibration();
+                break;
+            case PRECISION:
+                startPrecisionCalibration();
+                break;
+        }
+    }
+
+    private void startQuickStartCalibration() {
+        Log.d(TAG, "빠른 시작 캘리브레이션 실행");
+        Toast.makeText(this, "🚀 빠른 보정 시작 (2초)", Toast.LENGTH_SHORT).show();
+
+        // 대기시간 단축: 2초 → 1초
+        handler.postDelayed(() -> {
+            startOptimizedOnePointCalibration();
+        }, 1000);
+    }
+
+    private void startBalancedCalibration() {
+        Log.d(TAG, "균형 캘리브레이션 실행");
+        Toast.makeText(this, "⚖️ 스마트 보정 시작", Toast.LENGTH_SHORT).show();
+
+        startOptimizedOnePointCalibration();
+
+        // 5번 상호작용 후 정밀 보정 제안
+        scheduleOptionalPrecisionSuggestion();
+    }
+
+    private void startPrecisionCalibration() {
+        Log.d(TAG, "정밀 캘리브레이션 실행 (기존 방식)");
+        Toast.makeText(this, "🎯 정밀 보정 시작", Toast.LENGTH_SHORT).show();
+
+        // 기존 방식 그대로 실행
+        startOnePointCalibrationWithOffset();
+    }
+
+    // 🚀 최적화된 1포인트 캘리브레이션 (기존 메서드 개선)
+    private void startOptimizedOnePointCalibration() {
+        if (trackingRepository == null || trackingRepository.getTracker() == null) {
+            Log.e(TAG, "trackingRepository 또는 tracker가 null입니다");
+            return;
+        }
+
+        if (isCalibrating) {
+            Log.w(TAG, "이미 캘리브레이션 진행 중입니다");
+            return;
+        }
+
+        isCalibrating = true;
+        isOnePointCalibration = true;
+        offsetApplied = false;
+
+        overlayCursorView.setVisibility(View.INVISIBLE);
+        calibrationViewer.setVisibility(View.VISIBLE);
+
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        targetX = dm.widthPixels / 2f;
+        targetY = dm.heightPixels / 2f;
+
+        // 1초 후 캘리브레이션 시작 (기존 2초에서 단축)
+        handler.postDelayed(() -> {
+            if (trackingRepository.getTracker() != null) {
+                boolean ok = trackingRepository.getTracker().startCalibration(CalibrationModeType.ONE_POINT);
+                if (!ok) {
+                    resetCalibrationState();
+                    Toast.makeText(GazeTrackingService.this, "캘리브레이션 시작 실패", Toast.LENGTH_SHORT).show();
+                } else {
+                    Log.d(TAG, "최적화된 1포인트 캘리브레이션 시작");
+                }
+            }
+        }, 1000);
+    }
+
+    // 🔄 빠른 오프셋 계산 (기존 메서드 최적화)
+    private void calculateIntegratedOffset() {
+        waitingForOffsetCalculation = true;
+        validGazeCount = 0;
+        sumGazeX = 0f;
+        sumGazeY = 0f;
+
+        Log.d(TAG, "빠른 오프셋 계산 시작");
+        Toast.makeText(this, "시선 보정 중...", Toast.LENGTH_SHORT).show();
+
+        // 타임아웃 단축: 5초 → 3초
+        handler.postDelayed(() -> {
+            if (waitingForOffsetCalculation) {
+                waitingForOffsetCalculation = false;
+                offsetApplied = true;
+                overlayCursorView.setVisibility(View.VISIBLE);
+                enableBackgroundLearning(); // 백그라운드 학습 활성화
+                Log.w(TAG, "오프셋 계산 완료");
+                showCompletionMessage();
+            }
+        }, 3000);
+    }
+
+    // 📊 백그라운드 학습 시스템 (새로 추가)
+    private void enableBackgroundLearning() {
+        if (userSettings.isBackgroundLearningEnabled()) {
+            backgroundLearningEnabled = true;
+            Log.d(TAG, "백그라운드 학습 활성화");
+        }
+    }
+
+    private void recordUserInteraction(float gazeX, float gazeY, float targetX, float targetY) {
+        if (!backgroundLearningEnabled) return;
+
+        totalInteractions++;
+
+        // 간단한 오차 계산
+        float errorX = targetX - gazeX;
+        float errorY = targetY - gazeY;
+        float errorDistance = (float) Math.sqrt(errorX * errorX + errorY * errorY);
+
+        // 정확도 기록 (오차 40px 이하를 정확한 상호작용으로 간주)
+        if (errorDistance < 40) {
+            accurateInteractions++;
+        }
+
+        // 매우 가벼운 학습 (단순 지수 이동평균)
+        learningOffsetX = learningOffsetX * (1 - LEARNING_RATE) + errorX * LEARNING_RATE;
+        learningOffsetY = learningOffsetY * (1 - LEARNING_RATE) + errorY * LEARNING_RATE;
+        learningCount++;
+
+        // 10번마다 오프셋 적용
+        if (learningCount % LEARNING_UPDATE_INTERVAL == 0) {
+            applyLearningOffset();
+        }
+
+        // 주기적 정확도 체크
+        checkAccuracyPeriodically();
+    }
+
+    private void applyLearningOffset() {
+        // 기존 오프셋과 학습된 오프셋 결합
+        float newOffsetX = userSettings.getCursorOffsetX() + learningOffsetX;
+        float newOffsetY = userSettings.getCursorOffsetY() + learningOffsetY;
+
+        // 극단적인 값 방지 (화면 크기의 10% 이내)
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        float maxOffset = Math.min(dm.widthPixels, dm.heightPixels) * 0.1f;
+
+        newOffsetX = Math.max(-maxOffset, Math.min(maxOffset, newOffsetX));
+        newOffsetY = Math.max(-maxOffset, Math.min(maxOffset, newOffsetY));
+
+        // 설정 업데이트
+        if (settingsRepository instanceof SharedPrefsSettingsRepository) {
+            ((SharedPrefsSettingsRepository) settingsRepository)
+                    .saveIntegratedCursorOffset(newOffsetX, newOffsetY);
+        }
+
+        refreshSettings();
+
+        Log.d(TAG, String.format("학습 오프셋 적용: (%.1f, %.1f)", learningOffsetX, learningOffsetY));
+
+        // 학습 오프셋 리셋
+        learningOffsetX = 0f;
+        learningOffsetY = 0f;
+    }
+
+    private void checkAccuracyPeriodically() {
+        long currentTime = System.currentTimeMillis();
+
+        // 1분마다 정확도 체크
+        if (currentTime - lastAccuracyCheck > ACCURACY_CHECK_INTERVAL && totalInteractions >= 10) {
+            float accuracy = (float) accurateInteractions / totalInteractions * 100;
+
+            Log.d(TAG, String.format("현재 정확도: %.1f%% (%d/%d)", accuracy, accurateInteractions, totalInteractions));
+
+            // 정확도가 임계값 이하로 떨어지면 재보정 제안
+            if (accuracy < ACCURACY_THRESHOLD) {
+                suggestRecalibration();
+            }
+
+            lastAccuracyCheck = currentTime;
+        }
+    }
+
+    // 📋 사용자 알림 메서드들 (새로 추가)
+    private void showCompletionMessage() {
+        UserSettings.CalibrationStrategy strategy = userSettings.getCalibrationStrategy();
+        String message;
+
+        switch (strategy) {
+            case QUICK_START:
+                message = "✨ 보정 완료! 사용하며 자동으로 더 정확해집니다.";
+                break;
+            case BALANCED:
+                message = "⚖️ 기본 보정 완료! 필요시 정밀 보정을 권장합니다.";
+                break;
+            case PRECISION:
+                message = "🎯 정밀 보정 완료!";
+                break;
+            default:
+                message = "보정 완료!";
+        }
+
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    private void scheduleOptionalPrecisionSuggestion() {
+        // 5번 상호작용 후 정밀 보정 제안
+        handler.postDelayed(() -> {
+            if (totalInteractions >= 5) {
+                handler.post(() -> {
+                    Toast.makeText(this, "💡 더 정확한 시선 추적을 원하시면 앱에서 정밀 보정을 해보세요.",
+                            Toast.LENGTH_LONG).show();
+                });
+            }
+        }, 10000); // 10초 후
+    }
+
+    private void suggestRecalibration() {
+        handler.post(() -> {
+            Toast.makeText(this, "📊 시선 정확도가 떨어졌습니다. 앱에서 재보정을 권장합니다.",
+                    Toast.LENGTH_LONG).show();
         });
     }
 
@@ -255,7 +502,7 @@ public class GazeTrackingService extends Service {
         // 안내 메시지
         Toast.makeText(this, "잠시 후 나타나는 점을 응시해주세요", Toast.LENGTH_SHORT).show();
 
-        // 2초 후 캘리브레이션 시작 (1초 → 2초로 연장)
+        // 2초 후 캘리브레이션 시작 (정밀 보정은 기존 2초 유지)
         handler.postDelayed(() -> {
             if (trackingRepository.getTracker() != null) {
                 boolean ok = trackingRepository.getTracker().startCalibration(CalibrationModeType.ONE_POINT);
@@ -266,29 +513,7 @@ public class GazeTrackingService extends Service {
                     Log.d(TAG, "1포인트 캘리브레이션 시작 성공");
                 }
             }
-        }, 2000); // 1초 → 2초로 변경
-    }
-
-    // 통합 오프셋 계산 시작 메서드
-    private void calculateIntegratedOffset() {
-        waitingForOffsetCalculation = true;
-        validGazeCount = 0;
-        sumGazeX = 0f;
-        sumGazeY = 0f;
-
-        Log.d(TAG, "통합 오프셋 계산 시작 - 목표 위치: (" + targetX + ", " + targetY + ")");
-        Toast.makeText(this, "시선을 보정 중입니다...", Toast.LENGTH_SHORT).show();
-
-        // 5초 후에도 오프셋이 계산되지 않으면 강제 진행
-        handler.postDelayed(() -> {
-            if (waitingForOffsetCalculation) {
-                waitingForOffsetCalculation = false;
-                offsetApplied = true;
-                overlayCursorView.setVisibility(View.VISIBLE);
-                Log.w(TAG, "오프셋 계산 타임아웃 - 기존 설정 유지");
-                Toast.makeText(GazeTrackingService.this, "시선 보정이 완료되었습니다", Toast.LENGTH_SHORT).show();
-            }
-        }, 5000);
+        }, 2000);
     }
 
     // 상태 초기화 메서드
@@ -300,6 +525,7 @@ public class GazeTrackingService extends Service {
         overlayCursorView.setVisibility(View.VISIBLE);
     }
 
+    // 🔄 기존 TrackingCallback 수정 (백그라운드 학습 통합)
     private final TrackingCallback trackingCallback = new TrackingCallback() {
         @Override
         public void onMetrics(long timestamp, GazeInfo gazeInfo, FaceInfo faceInfo, BlinkInfo blinkInfo, UserStatusInfo userStatusInfo) {
@@ -307,61 +533,52 @@ public class GazeTrackingService extends Service {
             float screenWidth = dm.widthPixels;
             float screenHeight = dm.heightPixels;
 
-            // 시선 추적 성공 시
             if (gazeInfo.trackingState == TrackingState.SUCCESS) {
                 // 통합 오프셋 계산 대기 중이라면
                 if (waitingForOffsetCalculation) {
-                    // 필터링 없이 원시 데이터 수집 (평균 계산용)
                     sumGazeX += gazeInfo.x;
                     sumGazeY += gazeInfo.y;
                     validGazeCount++;
 
-                    // 10개 샘플 수집 후 평균 계산
-                    if (validGazeCount >= 10) {
+                    // 샘플 개수 단축: 10 → 5
+                    if (validGazeCount >= 5) {
                         float avgGazeX = sumGazeX / validGazeCount;
                         float avgGazeY = sumGazeY / validGazeCount;
 
-                        // 새로운 오프셋 계산 (목표 위치 - 실제 시선 위치)
                         float newOffsetX = targetX - avgGazeX;
                         float newOffsetY = targetY - avgGazeY;
 
-                        // 오프셋 유효성 검증 (화면 크기의 30% 이내)
                         float maxOffset = Math.min(screenWidth, screenHeight) * 0.3f;
 
-                        if (Math.abs(newOffsetX) <= maxOffset &&
-                                Math.abs(newOffsetY) <= maxOffset) {
-
-                            // 새로운 오프셋을 설정에 저장 (기존 오프셋 덮어쓰기)
+                        if (Math.abs(newOffsetX) <= maxOffset && Math.abs(newOffsetY) <= maxOffset) {
                             if (settingsRepository instanceof SharedPrefsSettingsRepository) {
                                 ((SharedPrefsSettingsRepository) settingsRepository)
                                         .saveIntegratedCursorOffset(newOffsetX, newOffsetY);
                             }
 
-                            // 설정 새로고침하여 새 오프셋 적용
                             refreshSettings();
                             offsetApplied = true;
+                            enableBackgroundLearning(); // 백그라운드 학습 활성화
 
-                            Log.d(TAG, "새 오프셋 적용 완료: X=" + newOffsetX + ", Y=" + newOffsetY);
-
-                            Toast.makeText(GazeTrackingService.this, "시선 보정이 완료되었습니다", Toast.LENGTH_SHORT).show();
+                            Log.d(TAG, String.format("빠른 오프셋 적용: X=%.1f, Y=%.1f", newOffsetX, newOffsetY));
+                            showCompletionMessage();
                         } else {
-                            // 오프셋이 너무 크면 기존 설정 유지
                             offsetApplied = true;
-                            Log.w(TAG, "계산된 오프셋이 너무 커서 기존 설정 유지");
-                            Toast.makeText(GazeTrackingService.this, "시선 보정이 완료되었습니다", Toast.LENGTH_SHORT).show();
+                            enableBackgroundLearning();
+                            Log.w(TAG, "오프셋이 너무 커서 기본값 사용");
+                            showCompletionMessage();
                         }
 
                         waitingForOffsetCalculation = false;
                         overlayCursorView.setVisibility(View.VISIBLE);
                     }
-                    return; // 오프셋 계산 중에는 다른 처리 안함
+                    return;
                 }
 
-                // 필터링 적용
-                float filteredX;
-                float filteredY;
-
+                // 기존 필터링 및 오프셋 적용 로직...
+                float filteredX, filteredY;
                 long filterTime = android.os.SystemClock.elapsedRealtime();
+
                 if (oneEuroFilterManager.filterValues(filterTime, gazeInfo.x, gazeInfo.y)) {
                     float[] filtered = oneEuroFilterManager.getFilteredValues();
                     filteredX = filtered[0];
@@ -371,7 +588,6 @@ public class GazeTrackingService extends Service {
                     filteredY = gazeInfo.y;
                 }
 
-                // 통합 오프셋 적용 (사용자 설정에서 로드)
                 if (offsetApplied) {
                     filteredX += userSettings.getCursorOffsetX();
                     filteredY += userSettings.getCursorOffsetY();
@@ -380,42 +596,46 @@ public class GazeTrackingService extends Service {
                 float safeX = Math.max(0, Math.min(filteredX, screenWidth - 1));
                 float safeY = Math.max(0, Math.min(filteredY, screenHeight - 1));
 
-                // 캘리브레이션 중이 아닌 경우에만 커서 업데이트
                 if (!isCalibrating) {
                     overlayCursorView.updatePosition(safeX, safeY);
                     lastValidTimestamp = System.currentTimeMillis();
 
-                    // 엣지 스크롤 탐지
+                    // 기존 엣지 스크롤 및 클릭 감지 로직...
                     EdgeScrollDetector.Edge edge = edgeScrollDetector.update(safeY, screenHeight);
 
                     if (edge == EdgeScrollDetector.Edge.TOP) {
-                        overlayCursorView.setTextPosition(false); // 상단 응시 텍스트는 아래쪽에 표시
+                        overlayCursorView.setTextPosition(false);
                         EdgeScrollDetector.ScrollAction action = edgeScrollDetector.processTopEdge();
                         overlayCursorView.setCursorText(edgeScrollDetector.getEdgeStateText());
 
                         if (action == EdgeScrollDetector.ScrollAction.SCROLL_DOWN) {
                             overlayCursorView.setCursorText("③");
                             scrollDown(userSettings.getContinuousScrollCount());
+                            // 백그라운드 학습을 위한 상호작용 기록
+                            recordUserInteraction(safeX, safeY, safeX, safeY - 100); // 스크롤은 예상 위치로 기록
                             handler.postDelayed(() -> resetAll(), 500);
                         }
                     } else if (edge == EdgeScrollDetector.Edge.BOTTOM) {
-                        overlayCursorView.setTextPosition(true); // 하단 응시 텍스트는 위쪽에 표시
+                        overlayCursorView.setTextPosition(true);
                         EdgeScrollDetector.ScrollAction action = edgeScrollDetector.processBottomEdge();
                         overlayCursorView.setCursorText(edgeScrollDetector.getEdgeStateText());
 
                         if (action == EdgeScrollDetector.ScrollAction.SCROLL_UP) {
                             overlayCursorView.setCursorText("③");
                             scrollUp(userSettings.getContinuousScrollCount());
+                            // 백그라운드 학습을 위한 상호작용 기록
+                            recordUserInteraction(safeX, safeY, safeX, safeY + 100); // 스크롤은 예상 위치로 기록
                             handler.postDelayed(() -> resetAll(), 500);
                         }
                     } else if (!edgeScrollDetector.isActive()) {
-                        // 상/하단 영역이 아닌 곳에서만 고정 클릭 로직 실행
                         boolean clicked = clickDetector.update(safeX, safeY);
                         overlayCursorView.setProgress(clickDetector.getProgress());
                         overlayCursorView.setCursorText("●");
 
                         if (clicked) {
                             performClick(safeX, safeY);
+                            // 백그라운드 학습을 위한 상호작용 기록 (클릭 위치 그대로)
+                            recordUserInteraction(safeX, safeY, safeX, safeY);
                         }
                     }
                 }

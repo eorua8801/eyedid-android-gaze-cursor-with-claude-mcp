@@ -12,7 +12,75 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- 기존 설정들 그대로 유지 -->
+        <!-- 🎯 새로운 캘리브레이션 전략 설정 섹션 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🎯 캘리브레이션 전략"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="사용 목적에 맞는 보정 방식을 선택하세요"
+            android:textSize="12sp"
+            android:textStyle="italic"
+            android:textColor="#666666"
+            android:layout_marginBottom="12dp"/>
+
+        <!-- 캘리브레이션 전략 라디오 그룹 -->
+        <RadioGroup
+            android:id="@+id/radio_group_calibration_strategy"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp">
+
+            <RadioButton
+                android:id="@+id/radio_quick_start"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🚀 빠른 시작"
+                android:layout_marginBottom="4dp"/>
+
+            <RadioButton
+                android:id="@+id/radio_balanced_cal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="⚖️ 균형"
+                android:layout_marginBottom="4dp"/>
+
+            <RadioButton
+                android:id="@+id/radio_precision"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="🎯 정밀"
+                android:layout_marginBottom="4dp"/>
+
+        </RadioGroup>
+
+        <!-- 전략 설명 텍스트 -->
+        <TextView
+            android:id="@+id/text_strategy_description"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="빠른 시작: 2초 빠른 보정 후 사용하며 자동 학습합니다."
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="12dp"
+            android:background="#F5F5F5"
+            android:padding="8dp"/>
+
+        <!-- 백그라운드 학습 스위치 -->
+        <Switch
+            android:id="@+id/switch_background_learning"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🧠 백그라운드 학습 (사용하며 자동 개선)"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- 기존 캘리브레이션 설정들 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

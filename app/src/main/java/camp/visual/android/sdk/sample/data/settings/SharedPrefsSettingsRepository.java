@@ -1,15 +1,16 @@
+// SharedPrefsSettingsRepository.java - 새 설정 추가 (패키지명 수정)
 package camp.visual.android.sdk.sample.data.settings;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-
 import camp.visual.android.sdk.sample.domain.model.OneEuroFilterPreset;
 import camp.visual.android.sdk.sample.domain.model.UserSettings;
 
 public class SharedPrefsSettingsRepository implements SettingsRepository {
-    private static final String PREFS_NAME = "eye_tracking_settings";
 
-    // 설정 키
+    private static final String PREF_NAME = "EyedidSampleAppSettings";
+
+    // 기존 키들...
     private static final String KEY_FIXATION_DURATION = "fixation_duration";
     private static final String KEY_AOI_RADIUS = "aoi_radius";
     private static final String KEY_SCROLL_ENABLED = "scroll_enabled";
@@ -22,23 +23,35 @@ public class SharedPrefsSettingsRepository implements SettingsRepository {
     private static final String KEY_AUTO_ONE_POINT_CALIBRATION = "auto_one_point_calibration";
     private static final String KEY_CURSOR_OFFSET_X = "cursor_offset_x";
     private static final String KEY_CURSOR_OFFSET_Y = "cursor_offset_y";
-
-    // OneEuroFilter 관련 키
     private static final String KEY_ONE_EURO_PRESET = "one_euro_preset";
     private static final String KEY_ONE_EURO_FREQ = "one_euro_freq";
     private static final String KEY_ONE_EURO_MIN_CUTOFF = "one_euro_min_cutoff";
     private static final String KEY_ONE_EURO_BETA = "one_euro_beta";
     private static final String KEY_ONE_EURO_D_CUTOFF = "one_euro_d_cutoff";
 
+    // 새로운 키들 추가
+    private static final String KEY_CALIBRATION_STRATEGY = "calibration_strategy";
+    private static final String KEY_BACKGROUND_LEARNING = "background_learning";
+
     private final SharedPreferences prefs;
 
     public SharedPrefsSettingsRepository(Context context) {
-        this.prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        this.prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     }
 
     @Override
     public UserSettings getUserSettings() {
-        // OneEuroFilter 프리셋 로드
+        // 캘리브레이션 전략 로드 (기본값: QUICK_START)
+        String strategyName = prefs.getString(KEY_CALIBRATION_STRATEGY,
+                UserSettings.CalibrationStrategy.QUICK_START.name());
+        UserSettings.CalibrationStrategy strategy;
+        try {
+            strategy = UserSettings.CalibrationStrategy.valueOf(strategyName);
+        } catch (IllegalArgumentException e) {
+            strategy = UserSettings.CalibrationStrategy.QUICK_START; // 안전한 기본값
+        }
+
+        // OneEuroFilter 프리셋 로드 (기존 코드)
         String presetName = prefs.getString(KEY_ONE_EURO_PRESET, OneEuroFilterPreset.BALANCED.name());
         OneEuroFilterPreset preset = OneEuroFilterPreset.fromName(presetName);
 
@@ -58,14 +71,19 @@ public class SharedPrefsSettingsRepository implements SettingsRepository {
                 .oneEuroFilterPreset(preset)
                 .oneEuroFreq(prefs.getFloat(KEY_ONE_EURO_FREQ, 30.0f))
                 .oneEuroMinCutoff(prefs.getFloat(KEY_ONE_EURO_MIN_CUTOFF, 1.0f))
-                .oneEuroBeta(prefs.getFloat(KEY_ONE_EURO_BETA, 0.0f))
+                .oneEuroBeta(prefs.getFloat(KEY_ONE_EURO_BETA, 0.007f))
                 .oneEuroDCutoff(prefs.getFloat(KEY_ONE_EURO_D_CUTOFF, 1.0f))
+                // 새 설정들 추가
+                .calibrationStrategy(strategy)
+                .backgroundLearningEnabled(prefs.getBoolean(KEY_BACKGROUND_LEARNING, true))
                 .build();
     }
 
     @Override
     public void saveUserSettings(UserSettings settings) {
         SharedPreferences.Editor editor = prefs.edit();
+
+        // 기존 설정들 저장...
         editor.putFloat(KEY_FIXATION_DURATION, settings.getFixationDurationMs());
         editor.putFloat(KEY_AOI_RADIUS, settings.getAoiRadius());
         editor.putBoolean(KEY_SCROLL_ENABLED, settings.isScrollEnabled());
@@ -86,6 +104,10 @@ public class SharedPrefsSettingsRepository implements SettingsRepository {
         editor.putFloat(KEY_ONE_EURO_BETA, (float) settings.getOneEuroBeta());
         editor.putFloat(KEY_ONE_EURO_D_CUTOFF, (float) settings.getOneEuroDCutoff());
 
+        // 새 설정들 저장
+        editor.putString(KEY_CALIBRATION_STRATEGY, settings.getCalibrationStrategy().name());
+        editor.putBoolean(KEY_BACKGROUND_LEARNING, settings.isBackgroundLearningEnabled());
+
         editor.apply();
     }
 
@@ -94,9 +116,7 @@ public class SharedPrefsSettingsRepository implements SettingsRepository {
         saveUserSettings(new UserSettings.Builder().build());
     }
 
-    /**
-     * 통합 오프셋을 저장하는 메서드 (캘리브레이션에서 사용)
-     */
+    // 기존 메서드들 유지...
     public void saveIntegratedCursorOffset(float offsetX, float offsetY) {
         SharedPreferences.Editor editor = prefs.edit();
         editor.putFloat(KEY_CURSOR_OFFSET_X, offsetX);

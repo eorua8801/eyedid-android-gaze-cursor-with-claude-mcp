@@ -10,6 +10,7 @@ import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
@@ -26,7 +27,15 @@ public class SettingsActivity extends AppCompatActivity {
     private SettingsRepository settingsRepository;
     private UserSettings currentSettings;
 
-    // UI 요소
+    // 🎯 새로운 캘리브레이션 전략 UI 요소들
+    private RadioGroup calibrationStrategyRadioGroup;
+    private RadioButton radioQuickStart;
+    private RadioButton radioBalancedCal;  // 이름 충돌 방지
+    private RadioButton radioPrecision;
+    private Switch backgroundLearningSwitch;
+    private TextView strategyDescriptionText;
+
+    // 기존 UI 요소들
     private SeekBar fixationDurationBar;
     private TextView fixationDurationText;
     private SeekBar aoiRadiusBar;
@@ -91,6 +100,14 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void initViews() {
+        // 🎯 캘리브레이션 전략 UI 초기화 (새로 추가)
+        calibrationStrategyRadioGroup = findViewById(R.id.radio_group_calibration_strategy);
+        radioQuickStart = findViewById(R.id.radio_quick_start);
+        radioBalancedCal = findViewById(R.id.radio_balanced_cal);
+        radioPrecision = findViewById(R.id.radio_precision);
+        backgroundLearningSwitch = findViewById(R.id.switch_background_learning);
+        strategyDescriptionText = findViewById(R.id.text_strategy_description);
+
         // 기존 SeekBar와 TextView 초기화
         fixationDurationBar = findViewById(R.id.seekbar_fixation_duration);
         fixationDurationText = findViewById(R.id.text_fixation_duration);
@@ -152,6 +169,24 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void loadSettings() {
+        // 🎯 캘리브레이션 전략 설정 로드 (새로 추가)
+        UserSettings.CalibrationStrategy strategy = currentSettings.getCalibrationStrategy();
+        switch (strategy) {
+            case QUICK_START:
+                radioQuickStart.setChecked(true);
+                break;
+            case BALANCED:
+                radioBalancedCal.setChecked(true);
+                break;
+            case PRECISION:
+                radioPrecision.setChecked(true);
+                break;
+        }
+        updateStrategyDescription(strategy);
+
+        // 🧠 백그라운드 학습 설정 로드 (새로 추가)
+        backgroundLearningSwitch.setChecked(currentSettings.isBackgroundLearningEnabled());
+
         // 기존 SeekBar 설정
         fixationDurationBar.setProgress((int)((currentSettings.getFixationDurationMs() - 300) / 100));
         updateFixationDurationText();
@@ -215,6 +250,23 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
+        // 🎯 캘리브레이션 전략 라디오 그룹 리스너 (새로 추가)
+        calibrationStrategyRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            UserSettings.CalibrationStrategy selectedStrategy = getSelectedStrategy();
+            updateStrategyDescription(selectedStrategy);
+            saveSettings();
+        });
+
+        // 🧠 백그라운드 학습 스위치 리스너 (새로 추가)
+        backgroundLearningSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            saveSettings();
+            if (isChecked) {
+                Toast.makeText(this, "✨ 사용하며 자동으로 정확도가 향상됩니다", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "수동 미세 조정만 사용됩니다", Toast.LENGTH_SHORT).show();
+            }
+        });
+
         // 프리셋 라디오 그룹 리스너
         filterPresetRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
             updateCustomFilterVisibility();
@@ -389,11 +441,44 @@ public class SettingsActivity extends AppCompatActivity {
         autoOnePointCalibrationSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
             saveSettings();
 
+            // 자동 캘리브레이션 비활성화시 경고
+            if (!isChecked) {
+                Toast.makeText(this, "⚠️ 수동으로 캘리브레이션을 실행해야 합니다", Toast.LENGTH_LONG).show();
+            }
+
             // 서비스에 설정 변경 알림
             if (GazeTrackingService.getInstance() != null) {
                 GazeTrackingService.getInstance().refreshSettings();
             }
         });
+    }
+
+    // 🎯 캘리브레이션 전략 관련 메서드들 (새로 추가)
+    private UserSettings.CalibrationStrategy getSelectedStrategy() {
+        int checkedId = calibrationStrategyRadioGroup.getCheckedRadioButtonId();
+        if (checkedId == R.id.radio_quick_start) return UserSettings.CalibrationStrategy.QUICK_START;
+        if (checkedId == R.id.radio_balanced_cal) return UserSettings.CalibrationStrategy.BALANCED;
+        if (checkedId == R.id.radio_precision) return UserSettings.CalibrationStrategy.PRECISION;
+        return UserSettings.CalibrationStrategy.QUICK_START; // 기본값
+    }
+
+    private void updateStrategyDescription(UserSettings.CalibrationStrategy strategy) {
+        String description = "";
+        switch (strategy) {
+            case QUICK_START:
+                description = "🚀 2초 빠른 보정 후 사용하며 자동 학습합니다.\n바로 시작하고 싶을 때 좋습니다.";
+                break;
+            case BALANCED:
+                description = "⚖️ 빠른 보정 후 필요시 정밀 보정을 추천합니다.\n균형잡힌 선택입니다.";
+                break;
+            case PRECISION:
+                description = "🎯 기존 방식으로 처음부터 정확한 보정을 합니다.\n정밀 작업시 좋습니다.";
+                break;
+        }
+
+        if (strategyDescriptionText != null) {
+            strategyDescriptionText.setText(description);
+        }
     }
 
     private void updateCustomFilterVisibility() {
@@ -478,7 +563,10 @@ public class SettingsActivity extends AppCompatActivity {
                 .oneEuroFreq(10 + oneEuroFreqBar.getProgress())
                 .oneEuroMinCutoff(oneEuroMinCutoffBar.getProgress() / 10.0)
                 .oneEuroBeta(oneEuroBetaBar.getProgress() / 1000.0) // 0.001 단위
-                .oneEuroDCutoff(oneEuroDCutoffBar.getProgress() / 10.0);
+                .oneEuroDCutoff(oneEuroDCutoffBar.getProgress() / 10.0)
+                // 🎯 새로운 설정들 추가
+                .calibrationStrategy(getSelectedStrategy())
+                .backgroundLearningEnabled(backgroundLearningSwitch.isChecked());
 
         UserSettings newSettings = builder.build();
         settingsRepository.saveUserSettings(newSettings);
