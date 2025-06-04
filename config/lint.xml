@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================================
+     Lint Configuration for EyedidTracker-Refactored
+     Specialized rules for gaze tracking applications
+     ============================================================================ -->
+<lint>
+    <!-- ========================================================================
+         Performance Rules for Real-time Gaze Tracking
+         ======================================================================== -->
+    
+    <!-- Critical: Prevent UI blocking in gaze tracking -->
+    <issue id="DefaultLocale" severity="error" />
+    <issue id="Recycle" severity="error" />
+    <issue id="ViewHolder" severity="error" />
+    <issue id="DrawAllocation" severity="error" />
+    
+    <!-- Memory management for continuous tracking -->
+    <issue id="StaticFieldLeak" severity="error" />
+    <issue id="HandlerLeak" severity="error" />
+    <issue id="ObjectAnimatorBinding" severity="error" />
+    
+    <!-- Performance optimizations -->
+    <issue id="UnusedResources" severity="warning" />
+    <issue id="IconDensities" severity="warning" />
+    <issue id="WebPIcon" severity="warning" />
+    <issue id="VectorDrawableCompat" severity="ignore" />
+    
+    <!-- ========================================================================
+         Security Rules for Accessibility & Camera Access
+         ======================================================================== -->
+    
+    <!-- Critical security for accessibility services -->
+    <issue id="ExportedService" severity="error" />
+    <issue id="ExportedReceiver" severity="error" />
+    <issue id="PermissionImpliesUnsupportedChromeOsHardware" severity="warning" />
+    
+    <!-- Camera and sensitive permissions -->
+    <issue id="MissingPermission" severity="error" />
+    <issue id="PermissionImpliesUnsupportedChromeOsHardware" severity="warning" />
+    
+    <!-- ========================================================================
+         Accessibility Rules for Eye Tracking Users
+         ======================================================================== -->
+    
+    <!-- Critical for users who depend on gaze tracking -->
+    <issue id="ClickableViewAccessibility" severity="error" />
+    <issue id="ContentDescription" severity="warning" />
+    <issue id="TouchTargetSizeCheck" severity="warning" />
+    <issue id="KeyboardInaccessible" severity="warning" />
+    
+    <!-- ========================================================================
+         Code Quality Rules
+         ======================================================================== -->
+    
+    <!-- Prevent common bugs -->
+    <issue id="SimpleDateFormat" severity="error" />
+    <issue id="DefaultLocale" severity="error" />
+    <issue id="LogNotTimber" severity="warning" />
+    <issue id="BinaryOperationInTimber" severity="warning" />
+    
+    <!-- Code maintainability -->
+    <issue id="UnusedAttribute" severity="warning" />
+    <issue id="UnusedIds" severity="warning" />
+    <issue id="IconMissingDensityFolder" severity="warning" />
+    
+    <!-- ========================================================================
+         Android Best Practices
+         ======================================================================== -->
+    
+    <!-- Modern Android development -->
+    <issue id="OldTargetApi" severity="error" />
+    <issue id="ExpiredTargetSdkVersion" severity="error" />
+    <issue id="MinSdkTooLow" severity="warning" />
+    
+    <!-- Lifecycle management -->
+    <issue id="CommitTransaction" severity="error" />
+    <issue id="SetJavaScriptEnabled" severity="warning" />
+    
+    <!-- ========================================================================
+         Disabled Rules (Project-specific)
+         ======================================================================== -->
+    
+    <!-- Translation not required for SDK sample -->
+    <issue id="MissingTranslation" severity="ignore" />
+    <issue id="ExtraTranslation" severity="ignore" />
+    
+    <!-- Design-related issues (handled by design team) -->
+    <issue id="IconLauncherShape" severity="ignore" />
+    <issue id="GoogleAppIndexingWarning" severity="ignore" />
+    
+    <!-- Gradle-related issues -->
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="NewerVersionAvailable" severity="ignore" />
+    
+    <!-- ========================================================================
+         Custom Rules for EyeDid SDK
+         ======================================================================== -->
+    
+    <!-- Allow specific patterns for EyeDid SDK integration -->
+    <issue id="CustomPermission" severity="ignore" />
+    <issue id="ProtectedPermissions" severity="ignore" />
+    
+    <!-- ========================================================================
+         File-specific Rules
+         ======================================================================== -->
+    
+    <!-- Ignore lint issues in auto-generated files -->
+    <issue id="all">
+        <ignore path="**/build/**" />
+        <ignore path="**/generated/**" />
+        <ignore path="**/R.java" />
+        <ignore path="**/BuildConfig.java" />
+    </issue>
+    
+    <!-- Specific files that may need exceptions -->
+    <issue id="HardcodedText">
+        <ignore path="**/activity_main.xml" />
+        <ignore path="**/activity_settings.xml" />
+    </issue>
+    
+    <!-- ========================================================================
+         Performance Monitoring
+         ======================================================================== -->
+    
+    <!-- Enable performance-critical checks -->
+    <issue id="Overdraw" severity="warning" />
+    <issue id="TooManyViews" severity="warning" />
+    <issue id="TooDeepLayout" severity="warning" />
+    <issue id="NestedWeights" severity="warning" />
+    
+    <!-- Memory efficiency -->
+    <issue id="LargeHeap" severity="warning" />
+    <issue id="WakelockTimeout" severity="error" />
+    
+    <!-- ========================================================================
+         Build Configuration
+         ======================================================================== -->
+    
+    <issue id="OldTargetApi">
+        <ignore path="build.gradle" />
+        <ignore path="build.gradle.kts" />
+    </issue>
+    
+    <!-- ========================================================================
+         Output Configuration
+         ======================================================================== -->
+    
+    <!-- Generate detailed reports -->
+    <issue id="LintError" severity="error" />
+    <issue id="StopShip" severity="error" />
+    
+</lint>

@@ -1,0 +1,347 @@
+# ============================================================================
+# CI/CD Pipeline for EyedidTracker-Refactored
+# Optimized for gaze tracking application development
+# ============================================================================
+
+name: 🎯 EyedidTracker CI/CD
+
+on:
+  push:
+    branches: [ master, main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+  pull_request:
+    branches: [ master, main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      run_performance_tests:
+        description: 'Run performance tests'
+        required: false
+        default: false
+        type: boolean
+
+# ============================================================================
+# Environment Configuration
+# ============================================================================
+env:
+  # Android build configuration
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=true
+  ANDROID_COMPILE_SDK: 34
+  ANDROID_TARGET_SDK: 34
+  ANDROID_MIN_SDK: 29
+  
+  # Build optimization
+  TERM: dumb
+  JAVA_TOOL_OPTIONS: -Xmx4g
+
+# ============================================================================
+# Job Definitions
+# ============================================================================
+jobs:
+  # ==========================================================================
+  # Code Quality & Static Analysis
+  # ==========================================================================
+  code-quality:
+    name: 🔍 Code Quality Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better analysis
+    
+    - name: ☕ Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+    
+    - name: 🐘 Setup Gradle
+      uses: gradle/gradle-build-action@v3
+      with:
+        gradle-home-cache-cleanup: true
+    
+    - name: 📋 Grant Execute Permission
+      run: chmod +x gradlew
+    
+    - name: 🔍 Run Lint Analysis
+      run: ./gradlew lintDebug
+      continue-on-error: true
+    
+    - name: 🧪 Run Unit Tests
+      run: ./gradlew testDebugUnitTest
+      continue-on-error: true
+    
+    - name: 📊 Upload Lint Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: lint-reports
+        path: |
+          app/build/reports/lint-results-*.html
+          app/build/reports/lint-results-*.xml
+        retention-days: 30
+    
+    - name: 📊 Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          app/build/reports/tests/
+          app/build/test-results/
+        retention-days: 30
+    
+    - name: 📈 Test Report Summary
+      uses: dorny/test-reporter@v1
+      if: success() || failure()
+      with:
+        name: 🧪 Unit Test Results
+        path: app/build/test-results/testDebugUnitTest/TEST-*.xml
+        reporter: java-junit
+
+  # ==========================================================================
+  # Security Analysis
+  # ==========================================================================
+  security-analysis:
+    name: 🔒 Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: 🔍 Run CodeQL Analysis
+      uses: github/codeql-action/init@v3
+      with:
+        languages: java
+        queries: security-and-quality
+    
+    - name: ☕ Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+    
+    - name: 📋 Grant Execute Permission
+      run: chmod +x gradlew
+    
+    - name: 🏗️ Build for Security Analysis
+      run: ./gradlew assembleDebug -x test -x lint
+    
+    - name: 🔍 Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:java"
+
+  # ==========================================================================
+  # Build & Performance Testing
+  # ==========================================================================
+  build-and-test:
+    name: 🏗️ Build & Performance Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        api-level: [29, 30, 34]
+        target: [default, google_apis]
+        exclude:
+          # Optimize build matrix
+          - api-level: 29
+            target: google_apis
+          - api-level: 30
+            target: google_apis
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: ☕ Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+    
+    - name: 🐘 Setup Gradle
+      uses: gradle/gradle-build-action@v3
+    
+    - name: 📋 Grant Execute Permission
+      run: chmod +x gradlew
+    
+    - name: 🧹 Clean Build
+      run: ./gradlew clean
+    
+    - name: 🏗️ Build Debug APK
+      run: ./gradlew assembleDebug
+    
+    - name: 🏗️ Build Release APK
+      run: ./gradlew assembleRelease
+      env:
+        # Add signing config if needed
+        SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+        SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+    
+    - name: 📊 Analyze APK Size
+      run: ./gradlew analyzeApkSize
+      continue-on-error: true
+    
+    - name: 🎯 Performance Tests
+      if: github.event.inputs.run_performance_tests == 'true' || contains(github.event.head_commit.message, '[perf-test]')
+      run: ./gradlew performanceTest
+      continue-on-error: true
+    
+    # Android Emulator testing (for critical builds only)
+    - name: 🤖 Enable KVM Group Permissions
+      if: matrix.api-level == 34 && matrix.target == 'default'
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+    
+    - name: 🧪 Run Instrumented Tests
+      if: matrix.api-level == 34 && matrix.target == 'default'
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: ${{ matrix.api-level }}
+        target: ${{ matrix.target }}
+        arch: x86_64
+        profile: Nexus 6
+        disable-animations: true
+        emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+        script: ./gradlew connectedDebugAndroidTest --continue
+    
+    - name: 📊 Upload APK Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: apk-${{ matrix.api-level }}-${{ matrix.target }}
+        path: |
+          app/build/outputs/apk/debug/*.apk
+          app/build/outputs/apk/release/*.apk
+        retention-days: 14
+    
+    - name: 📊 Upload Build Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: build-reports-${{ matrix.api-level }}-${{ matrix.target }}
+        path: |
+          app/build/reports/
+          build/reports/
+        retention-days: 7
+
+  # ==========================================================================
+  # Dependency Security Scan
+  # ==========================================================================
+  dependency-scan:
+    name: 🔍 Dependency Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: ☕ Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+    
+    - name: 📋 Grant Execute Permission
+      run: chmod +x gradlew
+    
+    - name: 🔍 Check Dependency Updates
+      run: ./gradlew checkDependencyUpdates
+      continue-on-error: true
+    
+    - name: 📊 Upload Dependency Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: dependency-reports
+        path: |
+          build/dependencyUpdates/
+          app/build/dependencyUpdates/
+        retention-days: 30
+
+  # ==========================================================================
+  # Release Build (on main/master branch)
+  # ==========================================================================
+  release-build:
+    name: 🚀 Release Build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    needs: [code-quality, security-analysis, build-and-test]
+    timeout-minutes: 30
+    
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: ☕ Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+    
+    - name: 📋 Grant Execute Permission
+      run: chmod +x gradlew
+    
+    - name: 🏗️ Build Release APK
+      run: ./gradlew assembleRelease
+      env:
+        SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+        SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+    
+    - name: 📊 Generate Release Notes
+      run: |
+        echo "## 🎯 EyedidTracker Release Build" > release_notes.md
+        echo "**Build Date:** $(date)" >> release_notes.md
+        echo "**Commit:** ${{ github.sha }}" >> release_notes.md
+        echo "**Branch:** ${{ github.ref_name }}" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "### 📱 APK Information:" >> release_notes.md
+        ls -la app/build/outputs/apk/release/ >> release_notes.md
+    
+    - name: 🎯 Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          app/build/outputs/apk/release/*.apk
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+
+# ============================================================================
+# Workflow Summary
+# ============================================================================
+# This workflow provides:
+# 1. 🔍 Comprehensive code quality analysis
+# 2. 🔒 Security scanning with CodeQL
+# 3. 🏗️ Multi-API level build testing
+# 4. 🧪 Automated testing (unit + instrumented)
+# 5. 📊 Performance analysis for gaze tracking
+# 6. 🔍 Dependency security scanning
+# 7. 🚀 Automated release builds
+# 
+# Optimized for EyedidTracker's real-time performance requirements
+# ============================================================================

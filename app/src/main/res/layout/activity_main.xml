@@ -38,6 +38,18 @@
         android:padding="12dp"
         android:layout_marginTop="8dp" />
 
+    <!-- 성능 보고서 버튼 -->
+    <Button
+        android:id="@+id/btn_performance_report"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📊 성능 보고서"
+        android:textSize="14sp"
+        android:padding="10dp"
+        android:layout_marginTop="8dp"
+        android:backgroundTint="#FF9800"
+        android:textColor="@android:color/white" />
+
     <!-- 설정 버튼 -->
     <Button
         android:id="@+id/btn_settings"
